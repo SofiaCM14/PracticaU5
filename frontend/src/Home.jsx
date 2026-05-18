@@ -1,126 +1,106 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, Button, Navbar } from 'react-bootstrap';
-import { signOut } from 'aws-amplify/auth';
+import { Container, Button, Navbar, Spinner } from 'react-bootstrap';
+
+// Importamos los tableros específicos creados de forma modular
+import AdminDashboard from './componentes/dashboards/AdminDashboard';
+import EncargadoDashboard from './componentes/dashboards/EncargadoDashboard';
+import VendedorDashboard from './componentes/dashboards/VendedorDashboard';
+import ClienteDashboard from './componentes/dashboards/ClienteDashboard';
 
 const Home = () => {
     const navigate = useNavigate();
+    const [role, setRole] = useState(null);
+    const [username, setUsername] = useState('');
+    const [loading, setLoading] = useState(true);
 
-    const handleLogout = async () => {
+    useEffect(() => {
+        // Obtenemos las variables de sesión del LocalStorage
+        const storedRole = localStorage.getItem('userRole');
+        const storedUser = localStorage.getItem('username');
+
+        // Si no hay token o rol válido, lo pateamos directo al login por seguridad
+        if (!storedRole) {
+            navigate('/');
+        } else {
+            // Homologamos los nombres de los roles que vienen de tu RDS PostgreSQL
+            // Ajusta los strings si en tu base de datos se llaman diferente (ej: 'Gerente', 'Cliente')
+            setRole(storedRole.toLowerCase().trim());
+            setUsername(storedUser || 'Usuario');
+        }
+        setLoading(false);
+    }, [navigate]);
+
+    const handleLogout = () => {
         try {
-            await signOut();
-            navigate('/login');
+            // Limpieza completa del LocalStorage para cerrar sesión de raíz
+            localStorage.clear();
+            navigate('/');
         } catch (error) {
-            console.error('Error al cerrar sesión:', error);
+            console.error('Error al cerrar sesión local:', error);
         }
     };
 
-    // Estilos personalizados rápidos
     const styles = {
         mainBg: {
-            backgroundColor: '#fff5f8', // Rosa muy tenue de fondo
+            backgroundColor: '#fff5f8', // Rosa muy tenue corporativo
             minHeight: '100vh',
             paddingBottom: '50px'
         },
         navbar: {
-            backgroundColor: '#ff85a2', // Rosa fuerte para la barra
+            backgroundColor: '#ff85a2', // Rosa fuerte del branding
             boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
-        },
-        pinkButton: {
-            backgroundColor: '#ff85a2',
-            border: 'none',
-            padding: '10px 20px'
-        },
-        cardHeader: {
-            backgroundColor: '#fce4ec', // Rosa pastel
-            color: '#c2185b', // Texto vino/rosa oscuro
-            fontWeight: 'bold',
-            fontSize: '1.5rem',
-            textAlign: 'center'
         }
     };
 
+    if (loading) {
+        return (
+            <div className="d-flex justify-content-center align-items-center" style={{ height: '100vh', backgroundColor: '#fff5f8' }}>
+                <Spinner animation="border" variant="danger" />
+            </div>
+        );
+    }
+
     return (
         <div style={styles.mainBg}>
-            {/* Barra de Navegación Estilizada */}
-            <Navbar style={styles.navbar} className="px-4 mb-5" variant="dark">
-                <Navbar.Brand className="fw-bold" style={{fontSize: '1.8rem'}}>
+            {/* Navbar compartido por toda la infraestructura */}
+            <Navbar style={styles.navbar} className="px-4 mb-4" variant="dark">
+                <Navbar.Brand className="fw-bold" style={{ fontSize: '1.6rem' }}>
                     ✨ SmartBoutique
                 </Navbar.Brand>
-                <Button 
-                    variant="light" 
-                    className="ms-auto fw-bold text-danger" 
-                    onClick={handleLogout}
-                    style={{borderRadius: '20px'}}
-                >
-                    Cerrar Sesión
-                </Button>
+                <Navbar.Collapse className="justify-content-end">
+                    <Navbar.Text className="text-white me-3 fw-semibold">
+                        Hola, <span className="text-decoration-underline">{username}</span> 🌸
+                    </Navbar.Text>
+                    <Button 
+                        variant="light" 
+                        className="fw-bold text-danger btn-sm" 
+                        onClick={handleLogout}
+                        style={{ borderRadius: '20px', padding: '5px 15px' }}
+                    >
+                        Cerrar Sesión
+                    </Button>
+                </Navbar.Collapse>
             </Navbar>
 
-            <Container>
-                <Row className="justify-content-center">
-                    <Col md={10}>
-                        <Card className="shadow-lg border-0" style={{borderRadius: '15px overflow-hidden'}}>
-                            {/* Card Header con el Nombre del Proyecto */}
-                            <Card.Header style={styles.cardHeader} className="py-4">
-                                Bienvenida a SmartBoutique 🌸
-                            </Card.Header>
-                            
-                            <Card.Body className="p-5">
-                                <Row className="text-center mb-5">
-                                    <Col>
-                                        <h2 style={{color: '#ad1457'}}>Panel de Administración</h2>
-                                        <p className="text-muted">Gestiona tu inventario y ventas con estilo</p>
-                                    </Col>
-                                </Row>
-
-                                <Row className="g-4">
-                                    {/* Inventario */}
-                                    <Col md={4}>
-                                        <Card className="h-100 border-0 shadow-sm text-center card-hover">
-                                            <Card.Body>
-                                                <div style={{fontSize: '3rem'}}>👗</div>
-                                                <Card.Title className="fw-bold mt-3">Inventario</Card.Title>
-                                                <Card.Text className="text-muted">Control de prendas, tallas y stock disponible.</Card.Text>
-                                                <Button style={styles.pinkButton} className="w-100 mt-2 shadow-sm">
-                                                    Ver Catálogo
-                                                </Button>
-                                            </Card.Body>
-                                        </Card>
-                                    </Col>
-
-                                    {/* Ventas */}
-                                    <Col md={4}>
-                                        <Card className="h-100 border-0 shadow-sm text-center">
-                                            <Card.Body>
-                                                <div style={{fontSize: '3rem'}}>🛍️</div>
-                                                <Card.Title className="fw-bold mt-3">Punto de Venta</Card.Title>
-                                                <Card.Text className="text-muted">Realiza ventas rápidas y genera tickets.</Card.Text>
-                                                <Button variant="success" className="w-100 mt-2 shadow-sm" style={{padding: '10px'}}>
-                                                    Nueva Venta
-                                                </Button>
-                                            </Card.Body>
-                                        </Card>
-                                    </Col>
-
-                                    {/* Reportes */}
-                                    <Col md={4}>
-                                        <Card className="h-100 border-0 shadow-sm text-center">
-                                            <Card.Body>
-                                                <div style={{fontSize: '3rem'}}>📊</div>
-                                                <Card.Title className="fw-bold mt-3">Análisis</Card.Title>
-                                                <Card.Text className="text-muted">Estadísticas de tus prendas más vendidas.</Card.Text>
-                                                <Button variant="info" className="w-100 mt-2 text-white shadow-sm" style={{padding: '10px'}}>
-                                                    Ver Reportes
-                                                </Button>
-                                            </Card.Body>
-                                        </Card>
-                                    </Col>
-                                </Row>
-                            </Card.Body>
-                        </Card>
-                    </Col>
-                </Row>
+            {/* Renderizado condicional inteligente basado en el Rol de la BD */}
+            <Container className="bg-white shadow-lg p-5 border-0" style={{ borderRadius: '15px' }}>
+                {role === 'admin' && <AdminDashboard />}
+                {role === 'gerente' && <AdminDashboard />}
+                
+                {role === 'encargado' && <EncargadoDashboard />}
+                
+                {role === 'vendedor' && <VendedorDashboard />}
+                
+                {role === 'cliente' && <ClienteDashboard />}
+                
+                {/* Fallback en caso de que un rol no coincida exactamente */}
+                {!['admin', 'gerente', 'encargado', 'vendedor', 'cliente'].includes(role) && (
+                    <div className="text-center py-5">
+                        <h3>⚠️ Rol no reconocido</h3>
+                        <p className="text-muted">Tu usuario está autenticado pero no tiene asignado un rol válido en el sistema distribuido.</p>
+                    </div>
+                )}
             </Container>
         </div>
     );
