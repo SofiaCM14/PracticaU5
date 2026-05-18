@@ -1,25 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Form, Button, Alert, Card, InputGroup } from 'react-bootstrap';
-import { Amplify } from 'aws-amplify';
-import { signIn, getCurrentUser } from 'aws-amplify/auth';
 import { useNavigate } from 'react-router-dom';
-
-Amplify.configure({
-    Auth: {
-        Cognito: {
-            userPoolId: 'us-west-2_s4SbDY3Cn',
-            userPoolClientId: '4gf18u8svhs3a0042fcdb06q48',
-            loginWith: { email: true }
-        }
-    }
-});
 
 const Login = () => {
     const [user, setUser] = useState('');
     const [pass, setPass] = useState('');
     const [showPass, setShowPass] = useState(false);
     const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [entrnado, setEntrando] = useState(false);
     const navigate = useNavigate();
 
     const styles = {
@@ -28,15 +16,12 @@ const Login = () => {
         pinkButton: { backgroundColor: '#ff85a2', border: 'none', fontWeight: 'bold' }
     };
 
-    // Verificar si ya hay sesión activa al cargar
+    // Verificar si ya hay una sesión y un rol guardados localmente
     useEffect(() => {
-        const checkUser = async () => {
-            try {
-                await getCurrentUser();
-                navigate('/home');
-            } catch (err) { /* No hay usuario, se queda en login */ }
-        };
-        checkUser();
+        const userRole = localStorage.getItem('userRole');
+        if (userRole) {
+            navigate('/home');
+        }
     }, [navigate]);
 
     const handleSubmit = async (e) => {
@@ -46,19 +31,41 @@ const Login = () => {
             return;
         }
         setError('');
-        setLoading(true);
+        setEntrando(true);
 
         try {
-            const { isSignedIn } = await signIn({ username: user, password: pass });
-            if (isSignedIn) {
-                navigate('/home');
+            // 🚀 MODIFICACIÓN: Petición a tu API REST en la instancia EC2
+            // Cambia 'localhost:3000' por tu IP pública de EC2 si ya está desplegado
+            const response = await fetch('http://34.219.103.28:3000/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username: user, password: pass })
+            });
+
+            const data = await response.json();
+            console.log("👉 ESTO RESPONDIÓ EL BACKEND DE AWS:", data);
+
+            if (!response.ok) {
+                // Mapeo manual de errores típicos de Cognito que regresa tu backend
+                if (data.error === 'NotAuthorizedException') throw new Error('Usuario o contraseña incorrectos.');
+                if (data.error === 'UserNotFoundException') throw new Error('El usuario no existe.');
+                throw new Error(data.message || 'Error al conectar con el servidor.');
             }
+
+            // 💾 GUARDAR LA DATA QUE ENVIÓ TU NUEVO CONTROLADOR MODULAR
+            localStorage.setItem('token', data.sessionData.IdToken); 
+            localStorage.setItem('username', data.username);
+            localStorage.setItem('userRole', data.role); // <-- Aquí se guarda 'admin', 'vendedor', 'cliente', etc.
+
+            // 🧭 Redirección exitosa
+            navigate('/home');
+
         } catch (err) {
-            if (err.name === 'NotAuthorizedException') setError('Usuario o contraseña incorrectos.');
-            else if (err.name === 'UserNotFoundException') setError('El usuario no existe.');
-            else setError('Error: ' + err.message);
+            setError(err.message);
         } finally {
-            setLoading(false);
+            setEntrando(false);
         }
     };
 
@@ -104,8 +111,8 @@ const Login = () => {
                                         </InputGroup>
                                     </Form.Group>
 
-                                    <Button style={styles.pinkButton} type="submit" className="w-100 py-2 shadow-sm" disabled={loading}>
-                                        {loading ? 'Entrando...' : 'Entrar'}
+                                    <Button style={styles.pinkButton} type="submit" className="w-100 py-2 shadow-sm" disabled={entrnado}>
+                                        {entrnado ? 'Entrando...' : 'Entrar'}
                                     </Button>
                                 </Form>
                             </Card.Body>
