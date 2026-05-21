@@ -1,6 +1,6 @@
 import express from 'express';
 // Asumiendo que tienes tu conexión a la base de datos importada como 'db'
-import db from '../config/db.js'; 
+import { pool } from '../config/db.js';
 
 const router = express.Router();
 
@@ -19,7 +19,7 @@ router.post('/', async (req, res) => {
             VALUES ($1, $2, $3, $4) 
             RETURNING *;
         `;
-        const productResult = await db.query(productQuery, [nombre, precio, stock, talla || 'M']);
+        const productResult = await pool.query(productQuery, [nombre, precio, stock, talla || 'M']);
         const nuevoProducto = productResult.rows[0];
 
         // 2. Insertar de manera automática el movimiento en la tabla 'auditoria'
@@ -28,7 +28,7 @@ router.post('/', async (req, res) => {
             VALUES ($1, $2, $3, $4, NOW());
         `;
         const detalleAuditoria = `Se ingresó el producto: ${nombre} (${stock} pzas) con precio $${precio}`;
-        await db.query(auditQuery, [usuario, rol, 'Recepcion Mercancia', detalleAuditoria]);
+        await pool.query(auditQuery, [usuario, rol, 'Recepcion Mercancia', detalleAuditoria]);
 
         res.status(201).json({
             message: 'Producto e historial registrados con éxito',
@@ -44,7 +44,7 @@ router.post('/', async (req, res) => {
 router.get('/auditoria', async (req, res) => {
     try {
         const query = 'SELECT * FROM auditoria ORDER BY fecha DESC LIMIT 10;';
-        const result = await db.query(query);
+        const result = await pool.query(query);
         res.json(result.rows);
     } catch (error) {
         console.error('Error al leer auditoria:', error);

@@ -2,7 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import rutasAutenticacion from './rutas/rutasAutenticacion.js'; // Importas las rutas modulares
-import productoRutas from './rutas/productoRutas.js'; // 1. IMPORTAS TU NUEVA RUTA DE PRODUCTOS
+import productoRutas from './rutas/productosRutas.js'; // 1. IMPORTAS TU NUEVA RUTA DE PRODUCTOS
 
 dotenv.config();
 const app = express();
