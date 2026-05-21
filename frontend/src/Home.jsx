@@ -19,12 +19,9 @@ const Home = () => {
         const storedRole = localStorage.getItem('userRole');
         const storedUser = localStorage.getItem('username');
 
-        // Si no hay token o rol válido, lo pateamos directo al login por seguridad
         if (!storedRole) {
             navigate('/');
         } else {
-            // Homologamos los nombres de los roles que vienen de tu RDS PostgreSQL
-            // Ajusta los strings si en tu base de datos se llaman diferente (ej: 'Gerente', 'Cliente')
             setRole(storedRole.toLowerCase().trim());
             setUsername(storedUser || 'Usuario');
         }
@@ -33,7 +30,6 @@ const Home = () => {
 
     const handleLogout = () => {
         try {
-            // Limpieza completa del LocalStorage para cerrar sesión de raíz
             localStorage.clear();
             navigate('/');
         } catch (error) {
@@ -43,7 +39,7 @@ const Home = () => {
 
     const styles = {
         mainBg: {
-            backgroundColor: '#fff5f8', // Rosa muy tenue corporativo
+            backgroundColor: '#fff5f8', // Rosa muy tenue corporativo de fondo general
             minHeight: '100vh',
             paddingBottom: '50px'
         },
@@ -83,10 +79,10 @@ const Home = () => {
                 </Navbar.Collapse>
             </Navbar>
 
-            {/* Renderizado condicional inteligente basado en el Rol de la BD */}
-            <Container className="bg-white shadow-lg p-5 border-0" style={{ borderRadius: '15px' }}>
+            {/* 🛠️ CONTENEDOR PADRE MODIFICADO 🛠️ */}
+            {/* Quitamos "bg-white", "shadow-lg" y cambiamos fluid para abarcar toda la pantalla */}
+            <Container fluid className="px-4">
                 {role === 'admin' && <AdminDashboard />}
-                {role === 'gerente' && <AdminDashboard />}
                 
                 {role === 'encargado' && <EncargadoDashboard />}
                 
@@ -94,11 +90,11 @@ const Home = () => {
                 
                 {role === 'cliente' && <ClienteDashboard />}
                 
-                {/* Fallback en caso de que un rol no coincida exactamente */}
-                {!['admin', 'gerente', 'encargado', 'vendedor', 'cliente'].includes(role) && (
-                    <div className="text-center py-5">
-                        <h3>⚠️ Rol no reconocido</h3>
-                        <p className="text-muted">Tu usuario está autenticado pero no tiene asignado un rol válido en el sistema distribuido.</p>
+                {/* Fallback de seguridad por si acaso */}
+                {!['admin', 'encargado', 'vendedor', 'cliente'].includes(role) && (
+                    <div className="text-center py-5 bg-white rounded shadow-sm">
+                        <h3>⚠️ Acceso Restringido</h3>
+                        <p className="text-muted">Tu rol (<code>{role}</code>) no cuenta con una interfaz modular asignada.</p>
                     </div>
                 )}
             </Container>
