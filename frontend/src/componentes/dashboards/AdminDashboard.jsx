@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Table, Badge, Form, Alert, Button, Card } from 'react-bootstrap';
-
+import { Row, Col, Table, Badge, Form, Alert, Button, Card, Modal } from 'react-bootstrap';
 const AdminDashboard = () => {
     const [recentActivity, setRecentActivity] = useState([]);
     const [listaUsuarios, setListaUsuarios] = useState([]);
