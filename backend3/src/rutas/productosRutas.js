@@ -66,7 +66,7 @@ router.delete('/usuarios/:id', async (req, res) => {
 });
 
 // ==========================================
-// 3. TABLA: productos (INVENTARIO COMPLETO)
+// 3. TABLA: productos (INVENTARIO COMPLETO - CRUD)
 // ==========================================
 router.get('/', async (req, res) => {
     try {
@@ -84,7 +84,7 @@ router.post('/', async (req, res) => {
         const prod = await pool.query(
             `INSERT INTO productos 
             (nombre, descripcion, precio, stock, talla, color, categoria, imagen_url, tags, fecha_creacion) 
-            VALUES ($1, 'Prenda cargada desde panel de gerencia', $2, $3, $4, 'Multicolor', 'General', 'https://placeholder.com/ropa.jpg', ARRAY['nueva_temporada'], NOW()) 
+            VALUES ($1, 'Prenda cargada desde panel de gerencia', $2, $3, $4, 'Multicolor', 'General', 'https://via.placeholder.com/300x200?text=Prenda+SmartBoutique', ARRAY['nueva_temporada'], NOW()) 
             RETURNING *;`,
             [nombre, precio, stock, talla]
         );
@@ -98,6 +98,24 @@ router.post('/', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Error al guardar producto' });
+    }
+});
+
+// ⚙️ NUEVO ENDPOINT: ACTUALIZAR TODAS LAS COLUMNAS DE UNA PRENDA (REQUERIDO POR EL MODAL)
+router.put('/:id', async (req, res) => {
+    const { id } = req.params;
+    const { nombre, precio, stock, talla, color, categoria, descripcion } = req.body;
+    try {
+        await pool.query(
+            `UPDATE productos 
+             SET nombre = $1, precio = $2, stock = $3, talla = $4, color = $5, categoria = $6, descripcion = $7 
+             WHERE id = $8;`,
+            [nombre, precio, stock, talla, color, categoria, descripcion, id]
+        );
+        res.json({ message: 'Producto actualizado con éxito en PostgreSQL' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error al actualizar el producto' });
     }
 });
 
