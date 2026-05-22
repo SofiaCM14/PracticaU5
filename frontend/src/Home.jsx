@@ -79,10 +79,9 @@ const Home = () => {
                 </Navbar.Collapse>
             </Navbar>
 
-            {/* 🛠️ CONTENEDOR PADRE MODIFICADO 🛠️ */}
-            {/* Quitamos "bg-white", "shadow-lg" y cambiamos fluid para abarcar toda la pantalla */}
+            {/* 🛠️ CONTENEDOR PADRE MODIFICADO CON PASO DE PROPS DE SESIÓN EN TIEMPO REAL 🛠️ */}
             <Container fluid className="px-4">
-                {role === 'admin' && <AdminDashboard />}
+                {role === 'admin' && <AdminDashboard usuarioActivo={username} rolActivo={role} />}
                 
                 {role === 'encargado' && <EncargadoDashboard />}
                 

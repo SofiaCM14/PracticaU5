@@ -77,16 +77,26 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Guardar producto adaptado a tus 11 columnas reales de PostgreSQL
+// 🛠️ POST MODIFICADO: Ahora recibe dinámicamente imagen_url (Base64), descripción, categoría, color y tags
 router.post('/', async (req, res) => {
-    const { nombre, precio, stock, talla, usuario, rol } = req.body;
+    const { nombre, descripcion, precio, stock, talla, color, categoria, imagen_url, tags, usuario, rol } = req.body;
     try {
         const prod = await pool.query(
             `INSERT INTO productos 
             (nombre, descripcion, precio, stock, talla, color, categoria, imagen_url, tags, fecha_creacion) 
-            VALUES ($1, 'Prenda cargada desde panel de gerencia', $2, $3, $4, 'Multicolor', 'General', 'https://via.placeholder.com/300x200?text=Prenda+SmartBoutique', ARRAY['nueva_temporada'], NOW()) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) 
             RETURNING *;`,
-            [nombre, precio, stock, talla]
+            [
+                nombre, 
+                descripcion || 'Prenda cargada desde panel de gerencia', 
+                precio, 
+                stock, 
+                talla, 
+                color || 'Multicolor', 
+                categoria || 'General', 
+                imagen_url || 'https://via.placeholder.com/300x200?text=Prenda+SmartBoutique', 
+                tags || ['nueva_temporada']
+            ]
         );
         
         await pool.query(
@@ -101,16 +111,16 @@ router.post('/', async (req, res) => {
     }
 });
 
-// ⚙️ NUEVO ENDPOINT: ACTUALIZAR TODAS LAS COLUMNAS DE UNA PRENDA (REQUERIDO POR EL MODAL)
+// 🛠️ PUT MODIFICADO: Sincroniza las columnas imagen_url (Base64) y tags (arreglos de texto) con el Modal
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
-    const { nombre, precio, stock, talla, color, categoria, descripcion } = req.body;
+    const { nombre, precio, stock, talla, color, categoria, descripcion, imagen_url, tags } = req.body;
     try {
         await pool.query(
             `UPDATE productos 
-             SET nombre = $1, precio = $2, stock = $3, talla = $4, color = $5, categoria = $6, descripcion = $7 
-             WHERE id = $8;`,
-            [nombre, precio, stock, talla, color, categoria, descripcion, id]
+             SET nombre = $1, precio = $2, stock = $3, talla = $4, color = $5, categoria = $6, descripcion = $7, imagen_url = $8, tags = $9
+             WHERE id = $10;`,
+            [nombre, precio, stock, talla, color, categoria, descripcion, imagen_url, tags, id]
         );
         res.json({ message: 'Producto actualizado con éxito en PostgreSQL' });
     } catch (error) {
