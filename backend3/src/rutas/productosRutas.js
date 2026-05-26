@@ -156,64 +156,47 @@ router.get('/', async (req, res) => {
 });
 
 // 🛠️ POST MODIFICADO: Guarda productos y registra movimientos en auditoría
+// ====== BUSCA EL POST DE PRODUCTOS EN productosRutas.js ======
+
 router.post('/', async (req, res) => {
-    const { nombre, descripcion, precio, stock, talla, color, categoria, imagen_url, tags, usuario, rol } = req.body;
-    const client = await pool.connect();
+    // 1. Extraemos los datos del body (incluyendo el usuario operador que manda el front)
+    const { nombre, precio, stock, talla, color, categoria, descripcion, imagen_url, tags, usuario } = req.body;
+
     try {
-        await client.query('BEGIN');
+        // --- PASO A: Insertar el producto en la tabla productos ---
+        const queryProducto = `
+            INSERT INTO productos (nombre, precio, stock, talla, color, categoria, descripcion, imagen_url, tags)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id;
+        `;
+        const resultProducto = await pool.query(queryProducto, [nombre, precio, stock, talla, color, categoria, descripcion, imagen_url, tags]);
+        const nuevoProductoId = resultProducto.rows[0].id;
 
-        let productTags = tags;
-        if (typeof productTags === 'string') {
-            productTags = productTags.split(',').map(tag => tag.trim()).filter(tag => tag !== '');
-        }
-        if (!Array.isArray(productTags) || productTags.length === 0) {
-            productTags = ['nueva_temporada'];
-        }
+        // --- PASO B: OBTENER EL ID DEL USUARIO PARA LA AUDITORÍA ---
+        // Como el front manda el username ('admin_sofi'), buscamos su id numérico en la BD
+        const resultUser = await pool.query('SELECT id FROM usuarios WHERE username = $1', [usuario || 'admin_sofi']);
+        const usuarioId = resultUser.rows[0]?.id || null; 
 
-        const prod = await client.query(
-            `INSERT INTO productos 
-            (nombre, descripcion, precio, stock, talla, color, categoria, imagen_url, tags, fecha_creacion) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) 
-            RETURNING *;`,
-            [
-                nombre,
-                descripcion || 'Prenda cargada desde panel de gerencia',
-                precio,
-                stock,
-                talla,
-                color || 'Multicolor',
-                categoria || 'General',
-                imagen_url || 'https://via.placeholder.com/300x200?text=Prenda+SmartBoutique',
-                productTags
-            ]
-        );
+        // --- PASO C: INSERTAR EN LA TABLA AUDITORIA ---
+        const queryAuditoria = `
+            INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha)
+            VALUES ($1, $2, $3, NOW());
+        `;
+        const detalle = `Se insertó una nueva prenda: "${nombre}" (Talla: ${talla}, Stock Inicial: ${stock} pz) con ID #${nuevoProductoId}.`;
+        
+        await pool.query(queryAuditoria, [
+            usuarioId, 
+            'CREAR_PRODUCTO', 
+            detalle
+        ]);
 
-        const usuarioId = await getUsuarioId(usuario);
-        const auditQuery = usuarioId !== null
-            ? 'INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) VALUES ($1, $2, $3, NOW());'
-            : 'INSERT INTO auditoria (accion_realizada, detalle_accion, fecha) VALUES ($1, $2, NOW());';
-        const auditParams = usuarioId !== null
-            ? [usuarioId, 'Recepcion Mercancia', `Ingreso: ${nombre} (${stock} pzas)`]
-            : ['Recepcion Mercancia', `Usuario: ${usuario || 'desconocido'} - Ingreso: ${nombre} (${stock} pzas)`];
+        // 2. Respondemos al frontend que todo fue un éxito
+        res.status(201).json({ message: 'Producto guardado y auditado con éxito.' });
 
-        await client.query(auditQuery, auditParams);
-
-        await client.query('COMMIT');
-
-        res.status(201).json({
-            success: true,
-            message: 'Producto guardado correctamente',
-            producto: prod.rows[0]
-        });
     } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('ERROR POSTGRESQL:', error);
-        res.status(500).json({ error: 'Error al guardar producto', details: error.message });
-    } finally {
-        client.release();
+        console.error('Error al guardar mercancía con auditoría:', error);
+        res.status(500).json({ error: 'Error interno al procesar la solicitud.' });
     }
 });
-
 // 🛠️ PUT MODIFICADO: Sincroniza las columnas imagen_url (Base64) y tags con el Modal
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
