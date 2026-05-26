@@ -513,8 +513,6 @@ const AdminDashboard = () => {
                         )}
 
                         {/* 📡 AUDITORÍA */}
-                        // ====== ENCUENTRA LA SECCIÓN DE AUDITORÍA EN AdminDashboard.jsx ======
-
                         {vistaActiva === 'auditoria' && (
                             <div>
                                 <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>📡 Bitácora Transaccional</h5>
@@ -525,20 +523,21 @@ const AdminDashboard = () => {
                                             <th>Rol</th>
                                             <th>Acción</th>
                                             <th>Detalle</th>
+                                            <th>Fecha</th> {/* 🟢 1. AGREGAMOS EL ENCABEZADO */}
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {recentActivity.map((log, i) => (
                                             <tr key={i} className="border-bottom">
-                                                {/* 🟢 Si tu backend hace un INNER JOIN, usa log.username, si no, déjalo como lo tienes */}
                                                 <td>{log.username || log.usuario || 'admin_sofi'}</td>
                                                 <td><Badge bg="danger">{log.rol || 'admin'}</Badge></td>
-                                                
-                                                {/* 🟢 LA SOLUCIÓN: Cambia log.accion por log.accion_realizada */}
                                                 <td>{log.accion_realizada}</td>
-                                                
-                                                {/* 🟢 LA SOLUCIÓN: Cambia log.detalle por log.detalle_accion */}
                                                 <td className="text-muted text-start">{log.detalle_accion}</td>
+                                                
+                                                {/* 🟢 2. PINTAMOS LA FECHA FORMATEADA */}
+                                                <td className="text-muted small">
+                                                    {log.fecha ? new Date(log.fecha).toLocaleString('es-MX') : '---'}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
