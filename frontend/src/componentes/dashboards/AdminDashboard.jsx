@@ -513,14 +513,33 @@ const AdminDashboard = () => {
                         )}
 
                         {/* 📡 AUDITORÍA */}
+                        // ====== ENCUENTRA LA SECCIÓN DE AUDITORÍA EN AdminDashboard.jsx ======
+
                         {vistaActiva === 'auditoria' && (
                             <div>
                                 <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>📡 Bitácora Transaccional</h5>
                                 <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
-                                    <thead className="table-light"><tr><th>Operador</th><th>Rol</th><th>Acción</th><th>Detalle</th></tr></thead>
+                                    <thead className="table-light">
+                                        <tr>
+                                            <th>Operador</th>
+                                            <th>Rol</th>
+                                            <th>Acción</th>
+                                            <th>Detalle</th>
+                                        </tr>
+                                    </thead>
                                     <tbody>
                                         {recentActivity.map((log, i) => (
-                                            <tr key={i} className="border-bottom"><td>{log.usuario}</td><td><Badge bg="danger">{log.rol}</Badge></td><td>{log.accion}</td><td className="text-muted text-start">{log.detalle}</td></tr>
+                                            <tr key={i} className="border-bottom">
+                                                {/* 🟢 Si tu backend hace un INNER JOIN, usa log.username, si no, déjalo como lo tienes */}
+                                                <td>{log.username || log.usuario || 'admin_sofi'}</td>
+                                                <td><Badge bg="danger">{log.rol || 'admin'}</Badge></td>
+                                                
+                                                {/* 🟢 LA SOLUCIÓN: Cambia log.accion por log.accion_realizada */}
+                                                <td>{log.accion_realizada}</td>
+                                                
+                                                {/* 🟢 LA SOLUCIÓN: Cambia log.detalle por log.detalle_accion */}
+                                                <td className="text-muted text-start">{log.detalle_accion}</td>
+                                            </tr>
                                         ))}
                                     </tbody>
                                 </Table>
