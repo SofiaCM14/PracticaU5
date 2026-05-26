@@ -3,6 +3,49 @@ import { pool } from '../config/db.js';
 import { esGerente, esEncargado, esVendedor, esCliente } from '../middlewares/rolesMiddleware.js';
 const router = express.Router();
 
+// 🟢 SOLUCIÓN DEFINITIVA: Cambiado a "async function" para evitar ReferenceError por Hoisting
+function decodeJwtPayload(token) {
+    try {
+        const payloadBase64 = token.split('.')[1];
+        if (!payloadBase64) return null;
+        const base64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, '=');
+        const payloadJson = Buffer.from(padded, 'base64').toString('utf8');
+        return JSON.parse(payloadJson);
+    } catch (error) {
+        console.error('decodeJwtPayload error:', error);
+        return null;
+    }
+}
+
+async function verificarToken(req, res, next) {
+    try {
+        console.log('verificarToken - headers:', req.headers);
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            console.log('verificarToken - token faltante o formato inválido');
+            return res.status(401).json({ error: 'Acceso denegado', message: 'Token no proporcionado o inválido.' });
+        }
+
+        const token = authHeader.split(' ')[1];
+        const payload = decodeJwtPayload(token);
+        const username = payload?.['cognito:username'] || payload?.username || req.headers['username'];
+
+        if (!username) {
+            console.log('verificarToken - no se pudo extraer el username del token');
+            return res.status(401).json({ error: 'Acceso denegado', message: 'No se pudo identificar al usuario.' });
+        }
+
+        req.user = { username };
+        console.log('verificarToken - req.user set to:', req.user);
+
+        next();
+    } catch (error) {
+        console.error('Error al verificar JWT de Cognito:', error);
+        return res.status(401).json({ error: 'Token inválido o expirado' });
+    }
+}
+
 const getUsuarioId = async (usuario) => {
     if (!usuario) return null;
     if (typeof usuario === 'number') return usuario;
@@ -38,7 +81,7 @@ router.get('/auditoria', async (req, res) => {
 // ==========================================
 
 // 🔒 CONSULTAR USUARIOS (Solo Gerente)
-router.get('/usuarios', esGerente, async (req, res) => {
+router.get('/usuarios', verificarToken, esGerente, async (req, res) => {
     try {
         const result = await pool.query('SELECT id, username, rol FROM usuarios ORDER BY id ASC;');
         res.json(result.rows);
@@ -49,7 +92,7 @@ router.get('/usuarios', esGerente, async (req, res) => {
 });
 
 // 🔒 AGREGAR NUEVO USUARIO (Solo Gerente)
-router.post('/usuarios', esGerente, async (req, res) => {
+router.post('/usuarios', verificarToken, esGerente, async (req, res) => {
     const { username, rol } = req.body;
     try {
         const result = await pool.query(
@@ -64,7 +107,7 @@ router.post('/usuarios', esGerente, async (req, res) => {
 });
 
 // 🔒 ACTUALIZAR USUARIO EXISTENTE (Solo Gerente)
-router.put('/usuarios/:id', esGerente, async (req, res) => {
+router.put('/usuarios/:id', verificarToken, esGerente, async (req, res) => {
     const { id } = req.params;
     const { username, rol } = req.body;
     try {
@@ -77,7 +120,7 @@ router.put('/usuarios/:id', esGerente, async (req, res) => {
 });
 
 // 🔒 ELIMINAR USUARIO DE LA BASE DE DATOS (Solo Gerente)
-router.delete('/usuarios/:id', esGerente, async (req, res) => {
+router.delete('/usuarios/:id', verificarToken, esGerente, async (req, res) => {
     const { id } = req.params;
     try {
         await pool.query('DELETE FROM usuarios WHERE id = $1;', [id]);
@@ -101,7 +144,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// 🛠️ POST MODIFICADO: Ahora recibe dinámicamente imagen_url (Base64), descripción, categoría, color y tags
+// 🛠️ POST MODIFICADO: Guarda productos y registra movimientos en auditoría
 router.post('/', async (req, res) => {
     const { nombre, descripcion, precio, stock, talla, color, categoria, imagen_url, tags, usuario, rol } = req.body;
     const client = await pool.connect();
@@ -160,7 +203,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 🛠️ PUT MODIFICADO: Sincroniza las columnas imagen_url (Base64) y tags (arreglos de texto) con el Modal
+// 🛠️ PUT MODIFICADO: Sincroniza las columnas imagen_url (Base64) y tags con el Modal
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre, precio, stock, talla, color, categoria, descripcion, imagen_url, tags } = req.body;

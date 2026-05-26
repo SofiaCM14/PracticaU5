@@ -7,11 +7,15 @@ import productoRutas from './src/rutas/productosRutas.js';
 const app = express();
 
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+origin: [
+        'http://localhost:5173',       // ──> Permite tus pruebas en local
+        'http://34.219.103.28',        // ──> Permite tu frontend en producción
+        'http://34.219.103.28:3000'
+    ],
+methods: ['GET', 'POST', 'PUT', 'DELETE'],
+allowedHeaders: ['Content-Type', 'Authorization', 'username'],
+credentials: true
 }));
-
 // 🚀 CONFIGURACIÓN DE CAPACIDAD EXTENDIDA PARA ENVIAR BASE64
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));

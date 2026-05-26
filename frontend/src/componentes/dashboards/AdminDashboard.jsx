@@ -42,15 +42,28 @@ const AdminDashboard = () => {
     const rolActivo = localStorage.getItem('userRole') || 'admin';
 
     // 📡 Mantenemos tus llamadas exactamente a la dirección original de tu API
+    
+    const getAuthHeaders = () => {
+        const token = localStorage.getItem('token');
+        if (!token) return {};
+        return { 'Authorization': `Bearer ${token}` };
+    };
     const cargarDatosAdmin = async () => {
         try {
+            const authHeaders = getAuthHeaders();
             const resAudit = await fetch('http://34.219.103.28:3000/api/productos/auditoria');
             if (resAudit.ok) setRecentActivity(await resAudit.json());
 
             const resProd = await fetch('http://34.219.103.28:3000/api/productos');
             if (resProd.ok) setProductos(await resProd.json());
-
-            const resUser = await fetch('http://34.219.103.28:3000/api/productos/usuarios');
+        
+            const token = localStorage.getItem('token'); // Recupera el token local
+            const resUser = await fetch('http://34.219.103.28:3000/api/productos/usuarios', {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json', 
+                    'username': usuarioActivo,
+                    ...authHeaders }
+            });
             if (resUser.ok) {
                 const datosUsuarios = await resUser.json();
                 setListaUsuarios(datosUsuarios);
@@ -194,7 +207,7 @@ const AdminDashboard = () => {
         try {
             const response = await fetch('http://34.219.103.28:3000/api/productos/usuarios', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ username: nuevoUsername, rol: nuevoRol })
             });
             if (response.ok) {
@@ -209,7 +222,7 @@ const AdminDashboard = () => {
         try {
             const response = await fetch(`http://34.219.103.28:3000/api/productos/usuarios/${id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ username: editUsername, rol: editRol })
             });
             if (response.ok) {
@@ -224,7 +237,8 @@ const AdminDashboard = () => {
         if (window.confirm(`¿Estás segura de eliminar al usuario "${username}"?`)) {
             try {
                 const response = await fetch(`http://34.219.103.28:3000/api/productos/usuarios/${id}`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    headers: getAuthHeaders()
                 });
                 if (response.ok) {
                     setAlertMessage(`El usuario "${username}" ha sido removido.`);
