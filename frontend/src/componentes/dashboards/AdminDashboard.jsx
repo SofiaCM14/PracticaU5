@@ -534,7 +534,6 @@ const AdminDashboard = () => {
                                                 <td>{log.accion_realizada}</td>
                                                 <td className="text-muted text-start">{log.detalle_accion}</td>
                                                 
-                                                {/* 🟢 2. PINTAMOS LA FECHA FORMATEADA */}
                                                 <td className="text-muted small">
                                                     {log.fecha ? new Date(log.fecha).toLocaleString('es-MX') : '---'}
                                                 </td>
