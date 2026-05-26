@@ -10,7 +10,7 @@ const AdminDashboard = () => {
     // Control de lienzo dinámico central
     const [vistaActiva, setVistaActiva] = useState('bienvenida'); 
 
-    // Formulario de Productos (Inserción rápida)
+    // Formulario de Productos (Inserción rápida y extendida)
     const [nombre, setNombre] = useState('');
     const [precio, setPrecio] = useState('');
     const [stock, setStock] = useState('');
@@ -44,13 +44,13 @@ const AdminDashboard = () => {
     // 📡 Mantenemos tus llamadas exactamente a la dirección original de tu API
     const cargarDatosAdmin = async () => {
         try {
-            const resAudit = await fetch('http://34.219.103.28:3000/productos/auditoria');
+            const resAudit = await fetch('http://34.219.103.28:3000/api/productos/auditoria');
             if (resAudit.ok) setRecentActivity(await resAudit.json());
 
-            const resProd = await fetch('http://34.219.103.28:3000/productos');
+            const resProd = await fetch('http://34.219.103.28:3000/api/productos');
             if (resProd.ok) setProductos(await resProd.json());
 
-            const resUser = await fetch('http://34.219.103.28:3000/productos/usuarios');
+            const resUser = await fetch('http://34.219.103.28:3000/api/productos/usuarios');
             if (resUser.ok) {
                 const datosUsuarios = await resUser.json();
                 setListaUsuarios(datosUsuarios);
@@ -64,18 +64,53 @@ const AdminDashboard = () => {
         cargarDatosAdmin(); 
     }, []);
 
+    useEffect(() => {
+        if (vistaActiva === 'mercancia') {
+            // LIMPIAR FORMULARIO NUEVA MERCANCÍA AL CAMBIAR DE VISTA
+            setNombre('');
+            setPrecio('');
+            setStock('');
+            setTalla('M');
+            setEditProdColor('');
+            setEditProdCategoria('');
+            setEditProdDescripcion('');
+            setEditProdImagen('');
+            setEditProdTags('');
+        }
+    }, [vistaActiva]);
+
     const handleAddProduct = async (e) => {
         e.preventDefault();
         try {
-            const response = await fetch('http://34.219.103.28:3000/productos', {
+            const tagsArray = typeof editProdTags === 'string'
+                ? editProdTags.split(',').map(tag => tag.trim()).filter(tag => tag !== '')
+                : Array.isArray(editProdTags)
+                    ? editProdTags
+                    : [];
+
+            const response = await fetch('http://34.219.103.28:3000/api/productos', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nombre, precio: parseFloat(precio), stock: parseInt(stock), talla, usuario: usuarioActivo, rol: rolActivo })
+                body: JSON.stringify({
+                    nombre,
+                    precio: parseFloat(precio),
+                    stock: parseInt(stock),
+                    talla,
+                    color: editProdColor,
+                    categoria: editProdCategoria,
+                    descripcion: editProdDescripcion,
+                    imagen_url: editProdImagen,
+                    tags: tagsArray.length > 0 ? tagsArray : ['nueva_temporada'],
+                    usuario: usuarioActivo,
+                    rol: rolActivo
+                })
             });
             if (response.ok) {
                 setAlertMessage(`¡Prenda "${nombre}" inyectada con éxito! ✨`);
-                setNombre(''); setPrecio(''); setStock('');
-                setVistaActiva('inventario'); 
+                setNombre(''); setPrecio(''); setStock(''); setTalla('M');
+                setEditProdColor(''); setEditProdCategoria(''); setEditProdDescripcion('');
+                setEditProdImagen(''); setEditProdTags('');
+                setVistaActiva('inventario');
                 cargarDatosAdmin();
             }
         } catch (error) {
@@ -108,7 +143,6 @@ const AdminDashboard = () => {
         if (file) {
             const reader = new FileReader();
             reader.onloadend = () => {
-                // Forzamos explícitamente a que guarde el resultado como string plano
                 setEditProdImagen(String(reader.result)); 
             };
             reader.readAsDataURL(file); 
@@ -121,13 +155,12 @@ const AdminDashboard = () => {
         try {
             const tagsArray = editProdTags.split(',').map(t => t.trim()).filter(t => t !== '');
             
-            // Verificación final de seguridad: Si la imagen por error se volvió a hacer objeto, la limpiamos a string vacio
             let imagenAEnviar = editProdImagen;
             if (typeof imagenAEnviar === 'object' || imagenAEnviar.includes('[object Object]')) {
                 imagenAEnviar = '';
             }
 
-            const response = await fetch(`http://34.219.103.28:3000/productos/${selectedProd.id}`, {
+            const response = await fetch(`http://34.219.103.28:3000/api/productos/${selectedProd.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -159,7 +192,7 @@ const AdminDashboard = () => {
         e.preventDefault();
         if (!nuevoUsername.trim()) return;
         try {
-            const response = await fetch('http://34.219.103.28:3000/productos/usuarios', {
+            const response = await fetch('http://34.219.103.28:3000/api/productos/usuarios', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: nuevoUsername, rol: nuevoRol })
@@ -174,7 +207,7 @@ const AdminDashboard = () => {
 
     const handleSaveEditUser = async (id) => {
         try {
-            const response = await fetch(`http://34.219.103.28:3000/productos/usuarios/${id}`, {
+            const response = await fetch(`http://34.219.103.28:3000/api/productos/usuarios/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: editUsername, rol: editRol })
@@ -190,7 +223,7 @@ const AdminDashboard = () => {
     const handleDeleteUser = async (id, username) => {
         if (window.confirm(`¿Estás segura de eliminar al usuario "${username}"?`)) {
             try {
-                const response = await fetch(`http://34.219.103.28:3000/productos/usuarios/${id}`, {
+                const response = await fetch(`http://34.219.103.28:3000/api/productos/usuarios/${id}`, {
                     method: 'DELETE'
                 });
                 if (response.ok) {
@@ -231,16 +264,19 @@ const AdminDashboard = () => {
                         <div>
                             <h6 className="fw-bold uppercase mb-3 text-center pb-2" style={{ color: '#ad1457', borderBottom: '1px solid #f8bbd0', fontSize: '0.85rem' }}>📋 MENÚ OPERATIVO</h6>
                             <button style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'inventario' ? '#ad1457' : '#fff', color: vistaActiva === 'inventario' ? '#fff' : '#ad1457' }} onClick={() => { setVistaActiva('inventario'); cargarDatosAdmin(); }}>
-                                👗 Inventario Completo
+                                👗 Prendas
                             </button>
                             <button style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'mercancia' ? '#ad1457' : '#fff', color: vistaActiva === 'mercancia' ? '#fff' : '#ad1457' }} onClick={() => { setVistaActiva('mercancia'); cargarDatosAdmin(); }}>
-                                🚛 Recibir Mercancía
+                                🚛 Recepción de Mercancía
                             </button>
                             <button style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'usuarios' ? '#ad1457' : '#fff', color: vistaActiva === 'usuarios' ? '#fff' : '#ad1457' }} onClick={() => { setVistaActiva('usuarios'); cargarDatosAdmin(); }}>
-                                👥 Control de Usuarios
+                                👥 Empleados
                             </button>
                             <button style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'auditoria' ? '#ad1457' : '#fff', color: vistaActiva === 'auditoria' ? '#fff' : '#ad1457' }} onClick={() => { setVistaActiva('auditoria'); cargarDatosAdmin(); }}>
-                                📡 Tabla de Auditoría
+                                📡 Movimientos
+                            </button>
+                            <button style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'auditoria' ? '#ad1457' : '#fff', color: vistaActiva === 'auditoria' ? '#fff' : '#ad1457' }} onClick={() => { setVistaActiva('auditoria'); cargarDatosAdmin(); }}>
+                                📡 Devoluciones
                             </button>
                         </div>
                         <div className="text-center pt-2 border-top small fw-bold" style={{ color: '#ad1457', borderColor: '#f8bbd0', fontSize: '0.8rem' }}>🟢 AWS RDS Connected 🖥️</div>
@@ -258,7 +294,7 @@ const AdminDashboard = () => {
 
                         {vistaActiva === 'inventario' && (
                             <div>
-                                <h5 className="fw-bold mb-4" style={{ color: '#ad1457' }}>👗 Catálogo de Tendencias en Nube (Cards con Persistencia RDS)</h5>
+                                <h5 className="fw-bold mb-4" style={{ color: '#ad1457' }}>👗 Prendas en existencia</h5>
                                 <Row className="g-3">
                                     {productos.map((p, i) => {
                                         const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23ad1457' text-anchor='middle'>Prenda SmartBoutique</text></svg>";
@@ -279,14 +315,32 @@ const AdminDashboard = () => {
                                         return (
                                             <Col md={4} key={i}>
                                                 <Card style={styles.cardBoutique} className="shadow-sm h-100">
-                                                    <Card.Img 
-                                                        variant="top" 
-                                                        src={imagenSrc} 
-                                                        style={{ height: '180px', objectFit: 'cover' }} 
-                                                        onError={(e) => { 
-                                                            e.target.src = fallbackImg; 
+                                                    {/* 🖼️ CONTENEDOR FLEXIBLE ADAPTATIVO A LA ORIENTACIÓN */}
+                                                    <div 
+                                                        className="d-flex justify-content-center align-items-center bg-light p-2" 
+                                                        style={{ 
+                                                            height: '240px', 
+                                                            overflow: 'hidden',
+                                                            borderBottom: '1px solid #f8bbd0',
+                                                            backgroundColor: '#fffdfd'
                                                         }}
-                                                    />
+                                                    >
+                                                        <Card.Img 
+                                                            variant="top" 
+                                                            src={imagenSrc} 
+                                                            style={{ 
+                                                                maxHeight: '100%', 
+                                                                maxWidth: '100%', 
+                                                                width: 'auto', 
+                                                                height: 'auto',
+                                                                objectFit: 'contain' 
+                                                            }} 
+                                                            onError={(e) => { 
+                                                                e.target.src = fallbackImg; 
+                                                            }}
+                                                        />
+                                                    </div>
+
                                                     <Card.Body className="d-flex flex-column justify-content-between p-3">
                                                         <div>
                                                             <div className="d-flex justify-content-between align-items-center mb-1">
@@ -320,7 +374,7 @@ const AdminDashboard = () => {
                                                                 className="w-100 fw-bold py-2 shadow-sm"
                                                                 onClick={() => abrirFormularioProducto(p)}
                                                             >
-                                                                ⚙️ Ajustar Prenda & Almacén
+                                                                ⚙️ Actualizar prenda
                                                             </Button>
                                                         </div>
                                                     </Card.Body>
@@ -332,26 +386,70 @@ const AdminDashboard = () => {
                             </div>
                         )}
 
-                        {/* 🚛 RECIBIR MERCANCÍA */}
+                        {/* 🚛 RECEPCIÓN DE MERCANCÍA PREMIUM COMPLETA */}
                         {vistaActiva === 'mercancia' && (
-                            <div style={{ maxWidth: '440px' }} className="mx-auto py-1">
-                                <h5 className="fw-bold mb-3 text-center" style={{ color: '#ad1457' }}>Formulario Entrada de Mercancía</h5>
+                            <div
+                                className="mx-auto animate__animated animate__fadeIn"
+                                style={{
+                                    maxWidth: '900px',
+                                    background: '#fffdfd',
+                                    borderRadius: '18px',
+                                    padding: '30px',
+                                    border: '1px solid #f8bbd0',
+                                    boxShadow: '0 4px 18px rgba(0,0,0,0.05)'
+                                }}
+                            >
+                                <div className="mb-4 text-center pb-2 border-bottom">
+                                    <h3 className="fw-bold mb-1" style={{ color: '#ad1457' }}>🚛 Entrada de Nueva Mercancía</h3>
+                                    <span className="text-muted small">Inyección directa de prendas hacia el clúster transaccional AWS RDS</span>
+                                </div>
+
                                 <Form onSubmit={handleAddProduct}>
-                                    <Form.Group className="mb-2">
-                                        <Form.Label className="small mb-1">Nombre</Form.Label>
-                                        <Form.Control type="text" value={nombre} onChange={e => setNombre(e.target.value)} required size="sm" />
-                                    </Form.Group>
-                                    <Row className="g-2">
-                                        <Col><Form.Group className="mb-2"><Form.Label className="small mb-1">Precio</Form.Label><Form.Control type="number" step="0.01" value={precio} onChange={e => setPrecio(e.target.value)} required size="sm" /></Form.Group></Col>
-                                        <Col><Form.Group className="mb-2"><Form.Label className="small mb-1">Cantidad</Form.Label><Form.Control type="number" value={stock} onChange={e => setStock(e.target.value)} required size="sm" /></Form.Group></Col>
+                                    <Row className="g-3 mb-3">
+                                        <Col md={6}>
+                                            <Form.Group>
+                                                <Form.Label className="small fw-bold text-muted">Nombre del Artículo</Form.Label>
+                                                <Form.Control type="text" value={nombre} onChange={e => setNombre(e.target.value)} required placeholder="Ej: Vestido Gala Satinado" />
+                                            </Form.Group>
+                                        </Col>
+                                        <Col md={3}><Form.Group><Form.Label className="small fw-bold text-muted">Precio Venta ($)</Form.Label><Form.Control type="number" step="0.01" value={precio} onChange={e => setPrecio(e.target.value)} required /></Form.Group></Col>
+                                        <Col md={3}><Form.Group><Form.Label className="small fw-bold text-muted">Cantidad Inicial</Form.Label><Form.Control type="number" value={stock} onChange={e => setStock(e.target.value)} required /></Form.Group></Col>
                                     </Row>
+
+                                    <Row className="g-3 mb-3">
+                                        <Col md={4}>
+                                            <Form.Group>
+                                                <Form.Label className="small fw-bold text-muted">Talla Base</Form.Label>
+                                                <Form.Select value={talla} onChange={e => setTalla(e.target.value)}><option value="S">S</option><option value="M">M</option><option value="L">L</option></Form.Select>
+                                            </Form.Group>
+                                        </Col>
+                                        <Col md={4}><Form.Group><Form.Label className="small fw-bold text-muted">Color Temático</Form.Label><Form.Control type="text" value={editProdColor} onChange={e => setEditProdColor(e.target.value)} placeholder="Negro, Arena..." required /></Form.Group></Col>
+                                        <Col md={4}><Form.Group><Form.Label className="small fw-bold text-muted">Categoría en Tienda</Form.Label><Form.Control type="text" value={editProdCategoria} onChange={e => setEditProdCategoria(e.target.value)} placeholder="Pantalones, Tops..." required /></Form.Group></Col>
+                                    </Row>
+
                                     <Form.Group className="mb-3">
-                                        <Form.Label className="small mb-1">Talla</Form.Label>
-                                        <Form.Select value={talla} onChange={e => setTalla(e.target.value)} size="sm">
-                                            <option value="S">S</option><option value="M">M</option><option value="L">L</option>
-                                        </Form.Select>
+                                        <Form.Label className="small fw-bold text-muted">Fotografía de la Prenda (Conversión automática)</Form.Label>
+                                        <Form.Control type="file" accept="image/*" onChange={handleFileChange} />
+                                        {editProdImagen && editProdImagen.trim() !== '' && (
+                                            <div className="mt-3 text-center bg-light p-2 rounded border">
+                                                <img src={editProdImagen} alt="Vista previa" style={{ height: '120px', borderRadius: '8px', objectFit: 'contain' }} />
+                                            </div>
+                                        )}
                                     </Form.Group>
-                                    <Button type="submit" style={{ backgroundColor: '#ad1457', border: 'none' }} className="w-100 fw-bold py-2 text-white">Guardar Producto</Button>
+
+                                    <Form.Group className="mb-3">
+                                        <Form.Label className="small fw-bold text-muted">Etiquetas (`tags` - Separados por comas)</Form.Label>
+                                        <Form.Control type="text" value={editProdTags} onChange={e => setEditProdTags(e.target.value)} placeholder="lino, fresco, playa" />
+                                    </Form.Group>
+
+                                    <Form.Group className="mb-4">
+                                        <Form.Label className="small fw-bold text-muted">Descripción Corta</Form.Label>
+                                        <Form.Control as="textarea" rows={2} value={editProdDescripcion} onChange={e => setEditProdDescripcion(e.target.value)} placeholder="Detalles de composición o corte..." />
+                                    </Form.Group>
+
+                                    <Button type="submit" className="w-100 fw-bold py-3 text-white shadow-sm" style={{ backgroundColor: '#ad1457', border: 'none', borderRadius: '10px' }}>
+                                        Guardar Nueva Mercancía en AWS RDS 🚀
+                                    </Button>
                                 </Form>
                             </div>
                         )}
@@ -418,7 +516,7 @@ const AdminDashboard = () => {
                 </Col>
             </Row>
 
-            {/* 🛠️ CONSOLA MODAL CON COMPROBACIÓN ANTE OBJETOS */}
+            {/* 🛠️ CONSOLA MODAL CON VISTA PREVIA CORTADA EXCLUSIVAMENTE EN EL COMPONENTE */}
             <Modal show={showProdModal} onHide={() => setShowProdModal(false)} centered size="lg">
                 <Modal.Header closeButton style={{ borderBottom: '1px solid #f8bbd0' }}>
                     <Modal.Title className="fw-bold" style={{ color: '#ad1457' }}>⚙️ Modificación Completa de Prenda</Modal.Title>
@@ -449,26 +547,32 @@ const AdminDashboard = () => {
                             </Col>
                         </Row>
 
-                        {/* 📸 CARGADOR AUTOMÁTICO DE ARCHIVOS A BASE64 */}
                         <Form.Group className="mb-2">
-                            <Form.Label className="small fw-bold text-muted">Seleccionar Foto de la Prenda (Automático a Base64)</Form.Label>
-                            <Form.Control 
-                                type="file" 
-                                accept="image/*" 
-                                onChange={handleFileChange} 
-                            />
-                            {/* Evita renderizar textos corruptos u objetos rotos dentro del modal */}
-                            {editProdImagen && editProdImagen.trim() !== '' && !editProdImagen.includes('[object Object]') && (
-                                <div className="mt-2 text-center bg-light p-2 rounded border">
-                                    <span className="small text-success d-block mb-1 fw-bold">✓ Vista previa de la prenda a guardar:</span>
-                                    <img 
-                                        src={editProdImagen.startsWith('data:image') || editProdImagen.includes('http') ? editProdImagen : `data:image/jpeg;base64,${editProdImagen}`} 
-                                        alt="Vista previa" 
-                                        style={{ height: '90px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #f8bbd0' }} 
-                                    />
-                                </div>
-                            )}
+                            <Form.Label className="small fw-bold text-muted">Selector de Fotografía (Cambio Automático)</Form.Label>
+                            <Form.Control type="file" accept="image/*" onChange={handleFileChange} />
                         </Form.Group>
+
+                        {/* MUESTRA LA CADENA RECORTADA VISUALMENTE EN EL CAMPO DE TEXTO INFORMATIVO */}
+                        <Form.Group className="mb-2">
+                            <Form.Label className="small fw-bold text-muted">Cadena Hash Binaria (`imagen_url` persistido)</Form.Label>
+                            <Form.Control 
+                                type="text" 
+                                readOnly 
+                                disabled
+                                value={editProdImagen && editProdImagen.length > 60 ? `${editProdImagen.substring(0, 60)}...` : editProdImagen} 
+                            />
+                        </Form.Group>
+
+                        {editProdImagen && editProdImagen.trim() !== '' && !editProdImagen.includes('[object Object]') && (
+                            <div className="mt-2 text-center bg-light p-2 rounded border">
+                                <span className="small text-success d-block mb-1 fw-bold">✓ Vista previa de la prenda a guardar:</span>
+                                <img 
+                                    src={editProdImagen.startsWith('data:image') || editProdImagen.includes('http') ? editProdImagen : `data:image/jpeg;base64,${editProdImagen}`} 
+                                    alt="Vista previa" 
+                                    style={{ height: '140px', borderRadius: '8px', objectFit: 'contain', border: '1px solid #f8bbd0' }} 
+                                />
+                            </div>
+                        )}
 
                         <Form.Group className="mb-2">
                             <Form.Label className="small fw-bold text-muted">Etiquetas (`tags` - Separados por comas)</Form.Label>

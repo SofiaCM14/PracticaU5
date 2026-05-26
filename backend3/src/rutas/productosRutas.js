@@ -1,14 +1,31 @@
 import express from 'express';
 import { pool } from '../config/db.js';
-
+import { esGerente, esEncargado, esVendedor, esCliente } from '../middlewares/rolesMiddleware.js';
 const router = express.Router();
+
+const getUsuarioId = async (usuario) => {
+    if (!usuario) return null;
+    if (typeof usuario === 'number') return usuario;
+    try {
+        const result = await pool.query('SELECT id FROM usuarios WHERE username = $1 LIMIT 1;', [usuario]);
+        return result.rows[0]?.id ?? null;
+    } catch (error) {
+        console.error('Error resolviendo usuario_id para auditoria:', error);
+        return null;
+    }
+};
 
 // ==========================================
 // 1. TABLA: auditoria (HISTORIAL COMPARTIDO)
 // ==========================================
 router.get('/auditoria', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM auditoria ORDER BY fecha DESC LIMIT 15;');
+        const result = await pool.query(`
+            SELECT a.*, u.username as usuario, u.rol 
+            FROM auditoria a 
+            LEFT JOIN usuarios u ON a.usuario_id = u.id 
+            ORDER BY a.fecha DESC LIMIT 15;
+        `);        
         res.json(result.rows);
     } catch (error) {
         console.error(error);
@@ -19,17 +36,20 @@ router.get('/auditoria', async (req, res) => {
 // ==========================================
 // 2. TABLA: usuarios (GESTIÓN DEL STAFF - CRUD)
 // ==========================================
-router.get('/usuarios', async (req, res) => {
+
+// 🔒 CONSULTAR USUARIOS (Solo Gerente)
+router.get('/usuarios', esGerente, async (req, res) => {
     try {
         const result = await pool.query('SELECT id, username, rol FROM usuarios ORDER BY id ASC;');
         res.json(result.rows);
     } catch (error) {
+        console.error('Error al consultar usuarios:', error);
         res.status(500).json({ error: 'Error al consultar usuarios' });
     }
 });
 
-// ➕ AGREGAR NUEVO USUARIO
-router.post('/usuarios', async (req, res) => {
+// 🔒 AGREGAR NUEVO USUARIO (Solo Gerente)
+router.post('/usuarios', esGerente, async (req, res) => {
     const { username, rol } = req.body;
     try {
         const result = await pool.query(
@@ -38,29 +58,32 @@ router.post('/usuarios', async (req, res) => {
         );
         res.status(201).json(result.rows[0]);
     } catch (error) {
+        console.error('Error al crear usuario:', error);
         res.status(500).json({ error: 'Error al crear usuario' });
     }
 });
 
-// ✏️ ACTUALIZAR USUARIO EXISTING
-router.put('/usuarios/:id', async (req, res) => {
+// 🔒 ACTUALIZAR USUARIO EXISTENTE (Solo Gerente)
+router.put('/usuarios/:id', esGerente, async (req, res) => {
     const { id } = req.params;
     const { username, rol } = req.body;
     try {
         await pool.query('UPDATE usuarios SET username = $1, rol = $2 WHERE id = $3;', [username, rol, id]);
         res.json({ message: 'Usuario actualizado con éxito' });
     } catch (error) {
+        console.error('Error al actualizar usuario:', error);
         res.status(500).json({ error: 'Error al actualizar usuario' });
     }
 });
 
-// 🗑️ ELIMINAR USUARIO DE LA BASE DE DATOS
-router.delete('/usuarios/:id', async (req, res) => {
+// 🔒 ELIMINAR USUARIO DE LA BASE DE DATOS (Solo Gerente)
+router.delete('/usuarios/:id', esGerente, async (req, res) => {
     const { id } = req.params;
     try {
         await pool.query('DELETE FROM usuarios WHERE id = $1;', [id]);
         res.json({ message: 'Usuario eliminado con éxito' });
     } catch (error) {
+        console.error('Error al eliminar usuario:', error);
         res.status(500).json({ error: 'Error al eliminar usuario' });
     }
 });
@@ -73,6 +96,7 @@ router.get('/', async (req, res) => {
         const result = await pool.query('SELECT * FROM productos ORDER BY id DESC;');
         res.json(result.rows);
     } catch (error) {
+        console.error('❌ ERROR REAL EN POSTGRESQL (RDS):', error);
         res.status(500).json({ error: 'Error al traer productos' });
     }
 });
@@ -80,34 +104,59 @@ router.get('/', async (req, res) => {
 // 🛠️ POST MODIFICADO: Ahora recibe dinámicamente imagen_url (Base64), descripción, categoría, color y tags
 router.post('/', async (req, res) => {
     const { nombre, descripcion, precio, stock, talla, color, categoria, imagen_url, tags, usuario, rol } = req.body;
+    const client = await pool.connect();
     try {
-        const prod = await pool.query(
+        await client.query('BEGIN');
+
+        let productTags = tags;
+        if (typeof productTags === 'string') {
+            productTags = productTags.split(',').map(tag => tag.trim()).filter(tag => tag !== '');
+        }
+        if (!Array.isArray(productTags) || productTags.length === 0) {
+            productTags = ['nueva_temporada'];
+        }
+
+        const prod = await client.query(
             `INSERT INTO productos 
             (nombre, descripcion, precio, stock, talla, color, categoria, imagen_url, tags, fecha_creacion) 
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) 
             RETURNING *;`,
             [
-                nombre, 
-                descripcion || 'Prenda cargada desde panel de gerencia', 
-                precio, 
-                stock, 
-                talla, 
-                color || 'Multicolor', 
-                categoria || 'General', 
-                imagen_url || 'https://via.placeholder.com/300x200?text=Prenda+SmartBoutique', 
-                tags || ['nueva_temporada']
+                nombre,
+                descripcion || 'Prenda cargada desde panel de gerencia',
+                precio,
+                stock,
+                talla,
+                color || 'Multicolor',
+                categoria || 'General',
+                imagen_url || 'https://via.placeholder.com/300x200?text=Prenda+SmartBoutique',
+                productTags
             ]
         );
-        
-        await pool.query(
-            'INSERT INTO auditoria (usuario, rol, accion, detalle, fecha) VALUES ($1, $2, $3, $4, NOW());',
-            [usuario, rol, 'Recepcion Mercancia', `Ingreso: ${nombre} (${stock} pzas)`]
-        );
-        
-        res.status(201).json(prod.rows[0]);
+
+        const usuarioId = await getUsuarioId(usuario);
+        const auditQuery = usuarioId !== null
+            ? 'INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) VALUES ($1, $2, $3, NOW());'
+            : 'INSERT INTO auditoria (accion_realizada, detalle_accion, fecha) VALUES ($1, $2, NOW());';
+        const auditParams = usuarioId !== null
+            ? [usuarioId, 'Recepcion Mercancia', `Ingreso: ${nombre} (${stock} pzas)`]
+            : ['Recepcion Mercancia', `Usuario: ${usuario || 'desconocido'} - Ingreso: ${nombre} (${stock} pzas)`];
+
+        await client.query(auditQuery, auditParams);
+
+        await client.query('COMMIT');
+
+        res.status(201).json({
+            success: true,
+            message: 'Producto guardado correctamente',
+            producto: prod.rows[0]
+        });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Error al guardar producto' });
+        await client.query('ROLLBACK');
+        console.error('ERROR POSTGRESQL:', error);
+        res.status(500).json({ error: 'Error al guardar producto', details: error.message });
+    } finally {
+        client.release();
     }
 });
 
@@ -134,30 +183,45 @@ router.put('/:id', async (req, res) => {
 // ========================================================
 router.post('/venta', async (req, res) => {
     const { total, items, usuario, rol } = req.body; 
+    const client = await pool.connect();
     try {
-        await pool.query('BEGIN');
-        const venta = await pool.query('INSERT INTO ventas (fecha, total) VALUES (NOW(), $1) RETURNING id;', [total]);
+        await client.query('BEGIN');
+        const venta = await client.query('INSERT INTO ventas (fecha, total) VALUES (NOW(), $1) RETURNING id;', [total]);
         const ventaId = venta.rows[0].id;
         for (let item of items) {
-            await pool.query('INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio) VALUES ($1, $2, $3, $4);', [ventaId, item.producto_id, item.cantidad, item.precio]);
-            await pool.query('UPDATE productos SET stock = stock - $1 WHERE id = $2;', [item.cantidad, item.producto_id]);
+            await client.query('INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio) VALUES ($1, $2, $3, $4);', [ventaId, item.producto_id, item.cantidad, item.precio]);
+            await client.query('UPDATE productos SET stock = stock - $1 WHERE id = $2;', [item.cantidad, item.producto_id]);
         }
-        await pool.query('INSERT INTO auditoria (usuario, rol, accion, detalle, fecha) VALUES ($1, $2, $3, $4, NOW());', [usuario, rol, 'Venta POS', `Ticket #${ventaId} cobrado por $${total}`]);
-        await pool.query('COMMIT');
+        const usuarioId = await getUsuarioId(usuario);
+        await client.query('INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) VALUES ($1, $2, $3, NOW());', [usuarioId, 'Venta POS', `Ticket #${ventaId} cobrado por $${total}`]);
+        await client.query('COMMIT');
         res.status(201).json({ message: 'Venta procesada con éxito', ventaId });
     } catch (error) {
-        await pool.query('ROLLBACK');
-        res.status(500).json({ error: 'Error al procesar la venta' });
+        await client.query('ROLLBACK');
+        console.error('ERROR VENTA:', error);
+        res.status(500).json({ error: 'Error al procesar la venta', details: error.message });
+    } finally {
+        client.release();
     }
 });
 
 router.post('/caja', async (req, res) => {
     const { tipo, monto, usuario, rol } = req.body; 
+    const client = await pool.connect();
     try {
-        await pool.query('INSERT INTO movimientos_caja (tipo, monto, fecha) VALUES ($1, $2, NOW());', [tipo, monto]);
-        await pool.query('INSERT INTO auditoria (usuario, rol, accion, detalle, fecha) VALUES ($1, $2, $3, $4, NOW());', [usuario, rol, `Corte Caja`, `${tipo} de caja por $${monto}`]);
+        await client.query('BEGIN');
+        await client.query('INSERT INTO movimientos_caja (tipo, monto, fecha) VALUES ($1, $2, NOW());', [tipo, monto]);
+        const usuarioId = await getUsuarioId(usuario);
+        await client.query('INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) VALUES ($1, $2, $3, NOW());', [usuarioId, 'Corte Caja', `${tipo} de caja por $${monto}`]);
+        await client.query('COMMIT');
         res.status(201).json({ message: 'Movimiento de caja guardado' });
-    } catch (error) { res.status(500).json({ error: 'Error en movimiento de caja' }); }
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('ERROR CAJA:', error);
+        res.status(500).json({ error: 'Error en movimiento de caja', details: error.message });
+    } finally {
+        client.release();
+    }
 });
 
 router.post('/asistencia', async (req, res) => {
