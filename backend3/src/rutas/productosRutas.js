@@ -309,18 +309,24 @@ router.post('/wishlist', async (req, res) => {
 });
 // ====== RUTA: POST http://34.219.103.28:3000/api/productos/registrar-venta ======
 router.post('/registrar-venta', verificarToken, async (req, res) => {
-    const { total, descuento_aplicado, usuario_id, carrito } = req.body; 
+    // 1. Desestructuramos las variables enviadas por el Frontend
+    const { total, descuento_aplicado, usuario_id, carrito, descuento_id } = req.body; 
+
+    // Blindaje por si usuario_id viene indefinido o nulo, le asignamos el ID 1 (admin_sofi)
+    const idOperador = usuario_id ? parseInt(usuario_id) : 1;
+    // Si no mandan el descuento_id en la petición, por defecto se amarra al ID 1 (Sin Descuento)
+    const idDescuento = descuento_id ? parseInt(descuento_id) : 1;
 
     try {
-        // 1. Iniciamos una transacción segura en PostgreSQL
+        // Iniciamos una transacción segura en PostgreSQL
         await pool.query('BEGIN');
 
-        // 2. PASO 1: Insertar el encabezado en la tabla "ventas"
+        // 2. PASO 1: Insertar el encabezado incluyendo el descuento_id relacional
         const queryVenta = `
-            INSERT INTO ventas (usuario_id, total, descuento_aplicado, fecha_venta) 
-            VALUES ($1, $2, $3, NOW()) RETURNING id;
+            INSERT INTO ventas (usuario_id, descuento_id, total, descuento_aplicado, fecha_venta) 
+            VALUES ($1, $2, $3, $4, NOW()) RETURNING id;
         `;
-        const resVenta = await pool.query(queryVenta, [usuario_id, total, descuento_aplicado]);
+        const resVenta = await pool.query(queryVenta, [idOperador, idDescuento, total, descuento_aplicado]);
         const nuevaVentaId = resVenta.rows[0].id; // Recuperamos el id automático generado
 
         // 3. PASO 2: Recorrer el carrito e insertar cada prenda en "detalle_ventas"
@@ -333,16 +339,33 @@ router.post('/registrar-venta', verificarToken, async (req, res) => {
             // Insertamos amarrando al ID de la venta que acabamos de crear
             await pool.query(queryDetalle, [nuevaVentaId, item.producto_id, item.cantidad, item.precio_unitario]);
             
-            // 🔥 Extra: Restamos las piezas del stock de la tabla productos
+            // Extra: Restamos las piezas del stock de la tabla productos
             await pool.query(
                 'UPDATE productos SET stock = stock - $1 WHERE id = $2',
                 [item.cantidad, item.producto_id]
             );
         }
 
-        // Si todo se ejecutó sin errores, guardamos los cambios permanentemente
+        // =================================================================
+        // 🚨 4. PASO 3: REGISTRO AUTOMÁTICO EN LA BITÁCORA DE AUDITORÍA
+        // =================================================================
+        const queryAuditoria = `
+            INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) 
+            VALUES ($1, $2, $3, NOW());
+        `;
+        
+        const desgloseDetalle = `Venta registrada de forma automatizada desde el Frontend. Folio generado: #V-${nuevaVentaId}. Total Neto Cobrado: $${parseFloat(total).toFixed(2)}. Descuento acumulado: $${parseFloat(descuento_aplicado).toFixed(2)}. Inventario actualizado correctamente.`;
+
+        await pool.query(queryAuditoria, [
+            idOperador, 
+            'REGISTRO_VENTA', 
+            desgloseDetalle
+        ]);
+        // =================================================================
+
+        // Si todo se ejecutó sin errores, guardamos los cambios permanentemente en AWS RDS
         await pool.query('COMMIT');
-        res.status(201).json({ message: 'Venta procesada con éxito', venta_id: nuevaVentaId });
+        res.status(201).json({ message: 'Venta procesada y auditada con éxito', venta_id: nuevaVentaId });
 
     } catch (error) {
         // Si algo truena, hacemos Rollback para dejar la base de datos intacta sin basura
