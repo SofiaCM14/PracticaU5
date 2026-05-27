@@ -17,6 +17,7 @@ const AdminDashboard = () => {
     // ====== ESTADOS PARA EL MÓDULO DE VENTAS ======
     const [idProductoVenta, setIdProductoVenta] = useState('');
     const [cantidadVenta, setCantidadVenta] = useState('');
+    const [descuentoSeleccionado, setDescuentoSeleccionado] = useState('0'); // Guarda el porcentaje como String (0, 10, 20, etc.)
 
     // Formulario de Productos (Inserción rápida y extendida)
     const [nombre, setNombre] = useState('');
@@ -156,37 +157,47 @@ const AdminDashboard = () => {
         setCantidadVenta('');
     };
 
-    const handleCompraDirecta = async (e) => {
+        const handleCompraDirecta = async (e) => {
         e.preventDefault();
 
         // 1. Validamos que el producto exista en tu lista de prendas local
-        const productoExiste = prendasData.find(p => p.id === parseInt(idProductoVenta));
+        const productoExiste = productos.find(p => p.id === parseInt(idProductoVenta));
         
         if (!productoExiste) {
             alert("⚠️ El ID del producto no existe en el catálogo.");
             return;
         }
         
-        // 2. Validamos si hay suficiente stock en AWS antes de mandar la petición
+        // 2. Validamos si hay suficiente stock en AWS
         if (parseInt(cantidadVenta) > productoExiste.stock) {
             alert(`⚠️ Stock insuficiente. Solo quedan ${productoExiste.stock} pz.`);
             return;
         }
 
-        // 3. Calculamos el total con su precio real actual de catálogo
-        const precioReal = parseFloat(productoExiste.precio);
-        const totalCobrado = parseInt(cantidadVenta) * precioReal;
+        // 3. 🎯 LÓGICA DE DESCUENTOS ESTABLECIDOS
+        const precioCatalogo = parseFloat(productoExiste.precio);
+        const porcentajeDescuento = parseFloat(descuentoSeleccionado); // Ej: 10 o 20
+        
+        // Calculamos cuánto se le va a restar por cada pieza
+        const descuentoPorPieza = precioCatalogo * (porcentajeDescuento / 100);
+        const precioConDescuento = precioCatalogo - descuentoPorPieza;
+        
+        // Calculamos los totales globales de la transacción
+        const totalCobradoFinal = parseInt(cantidadVenta) * precioConDescuento;
+        const totalDineroDescontado = parseInt(cantidadVenta) * descuentoPorPieza;
 
-        // 4. Estructuramos el cuerpo simulando el formato de "carrito" que espera tu backend
+        // 4. Estructuramos el cuerpo asegurando el ID correcto del operador activo
+        const usuarioIdReal = localStorage.getItem('userId') ? parseInt(localStorage.getItem('userId')) : 1;
+
         const datosVenta = {
-            total: totalCobrado,
-            descuento_aplicado: 0.00,
-            usuario_id: usuarioActivo.id, // ID de admin_sofi
+            total: totalCobradoFinal,
+            descuento_aplicado: totalDineroDescontado, // ──> 🟢 Ahora mandamos los pesos reales ahorrados a la BD
+            usuario_id: usuarioIdReal,
             carrito: [
                 {
                     producto_id: productoExiste.id,
                     cantidad: parseInt(cantidadVenta),
-                    precio_unitario: precioReal
+                    precio_unitario: precioConDescuento // ──> 🟢 Se registra con el precio rebajado en detalle_ventas
                 }
             ]
         };
@@ -204,15 +215,19 @@ const AdminDashboard = () => {
             if (res.ok) {
                 const data = await res.json();
                 
-                // Limpiamos los inputs de inmediato
+                // Limpiamos los campos de la caja registradora
                 setIdProductoVenta('');
                 setCantidadVenta('');
+                setDescuentoSeleccionado('0'); // Resetea el menú de descuentos a "Sin Descuento"
                 
-                // Recargamos el historial para ver el nuevo folio
-                cargarDatosAdmin(); 
+                // Forzamos la actualización del historial en segundo plano
+                await cargarDatosAdmin(); 
                 
-                // 🟢 Disparamos automáticamente tu modal estilo ticket bonito
-                handleVerDetallesTicket(data.venta_id);
+                // Damos un breve tiempo para pintar el historial antes de abrir el ticket
+                setTimeout(() => {
+                    handleVerDetallesTicket(data.venta_id);
+                }, 300);
+
             } else {
                 alert("Error al registrar la venta en el servidor.");
             }
@@ -857,167 +872,223 @@ const AdminDashboard = () => {
                             </div>
                         )}
                         {/* ====== AGREGA ESTA VISTA EN AdminDashboard.jsx ====== */}
-                        {/* ==================== MÓDULO DE VENTAS COMPLETO ==================== */}
-                        {/* ==================== MÓDULO DE VENTAS COMPLETO (COMPRA DIRECTA) ==================== */}
-                        {vistaActiva === 'ventas' && (
-                            <div className="animate__animated animate__fadeIn">
-                                
-                                {/* 🛒 FORMULARIO DE COMPRA EXPRÉS */}
-                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>🛒 Registrar Nueva Venta Directa</h5>
-                                
-                                <Form onSubmit={handleCompraDirecta} className="row g-2 mb-4 p-2 bg-light rounded align-items-end m-0 border">
-                                    {/* Input ID Producto */}
-                                    <Col md={4}>
-                                        <Form.Control 
-                                            type="number" 
-                                            placeholder="ID del Producto (Ej: 3)" 
-                                            value={idProductoVenta} 
-                                            onChange={e => setIdProductoVenta(e.target.value)} 
-                                            size="sm" 
-                                            required 
-                                        />
-                                    </Col>
-                                    
-                                    {/* Input Cantidad */}
-                                    <Col md={4}>
-                                        <Form.Control 
-                                            type="number" 
-                                            placeholder="Cantidad a vender" 
-                                            value={cantidadVenta} 
-                                            onChange={e => setCantidadVenta(e.target.value)} 
-                                            size="sm" 
-                                            required 
-                                        />
-                                    </Col>
-                                    
-                                    {/* Botón Realizar Compra */}
-                                    <Col md={4}>
-                                        <Button type="submit" variant="danger" className="w-100 btn-sm" style={{ height: '31px', backgroundColor: '#ad1457', borderColor: '#ad1457' }}>
-                                            💰 Realizar Compra Directa
-                                        </Button>
-                                    </Col>
-                                </Form>
+                    {vistaActiva === 'ventas' && (
+                        <div className="animate__animated animate__fadeIn">
+                            
+                            {/* 🛒 FORMULARIO DE COMPRA EXPRÉS */}
+                            <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>🛒 Registrar Nueva Venta.</h5>
+                            {/* 🛒 FORMULARIO DE COMPRA EXPRÉS CON MENÚ DE DESCUENTOS */}
 
-                                <hr className="my-4 text-muted" />
+                            <Form onSubmit={handleCompraDirecta} className="row g-2 mb-4 p-2 bg-light rounded align-items-end m-0 border">
+                                {/* Input ID Producto */}
+                                <Col md={3}>
+                                    <Form.Label className="small fw-bold text-muted mb-1">ID Producto</Form.Label>
+                                    <Form.Control 
+                                        type="number" 
+                                        placeholder="Ej: 3" 
+                                        value={idProductoVenta} 
+                                        onChange={e => setIdProductoVenta(e.target.value)} 
+                                        size="sm" 
+                                        required 
+                                    />
+                                </Col>
+                                
+                                {/* Input Cantidad */}
+                                <Col md={3}>
+                                    <Form.Label className="small fw-bold text-muted mb-1">Cantidad</Form.Label>
+                                    <Form.Control 
+                                        type="number" 
+                                        placeholder="Piezas" 
+                                        value={cantidadVenta} 
+                                        onChange={e => setCantidadVenta(e.target.value)} 
+                                        size="sm" 
+                                        required 
+                                    />
+                                </Col>
 
-                                {/* 📊 HISTORIAL DE VENTAS */}
-                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>💰 Historial de Ventas Ejecutadas</h5>
-                                <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
-                                    <thead className="table-light">
+                                {/* 🟢 NUEVO MENÚ DESPLEGABLE: Opciones fijas de descuento */}
+                                <Col md={3}>
+                                    <Form.Label className="small fw-bold text-muted mb-1">Descuento Especial</Form.Label>
+                                    <Form.Select 
+                                        value={descuentoSeleccionado} 
+                                        onChange={e => setDescuentoSeleccionado(e.target.value)} 
+                                        size="sm"
+                                    >
+                                        <option value="0">Sin Descuento (0%)</option>
+                                        <option value="10">Descuento de Temporada (10%)</option>
+                                        <option value="15">Venta Especial (15%)</option>
+                                        <option value="20">Liquidación (20%)</option>
+                                        <option value="50">⚠️ Gran Outlet (50%)</option>
+                                    </Form.Select>
+                                </Col>
+                                
+                                {/* Botón Realizar Compra */}
+                                <Col md={3}>
+                                    <Button type="submit" variant="danger" className="w-100 btn-sm" style={{ height: '31px', backgroundColor: '#ad1457', borderColor: '#ad1457' }}>
+                                        💰 Realizar Compra.
+                                    </Button>
+                                </Col>
+                            </Form>
+                                                        
+                            
+
+                            <hr className="my-4 text-muted" />
+
+                            {/* 📊 HISTORIAL DE VENTAS */}
+                            <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>💰 Historial de Ventas Ejecutadas</h5>
+                            <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
+                                <thead className="table-light">
+                                    <tr>
+                                        <th>Folio</th>
+                                        <th>Vendedor</th>
+                                        <th>Rol</th>
+                                        <th>Descuento</th>
+                                        <th>Total Cobrado</th>
+                                        <th>Fecha y Hora</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {ventasData.length === 0 ? (
                                         <tr>
-                                            <th>Folio</th>
-                                            <th>Vendedor</th>
-                                            <th>Rol</th>
-                                            <th>Descuento</th>
-                                            <th>Total Cobrado</th>
-                                            <th>Fecha y Hora</th>
-                                            <th>Acciones</th>
+                                            <td colSpan="7" className="text-muted py-3">No hay ventas registradas todavía.</td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {ventasData.length === 0 ? (
-                                            <tr>
-                                                <td colSpan="7" className="text-muted py-3">No hay ventas registradas todavía.</td>
+                                    ) : (
+                                        ventasData.map((venta, i) => (
+                                            <tr key={i} className="border-bottom">
+                                                <td className="fw-bold text-secondary">#V-{venta.id}</td>
+                                                <td>{venta.vendedor_name || 'Desconocido'}</td>
+                                                <td>
+                                                    <Badge bg={venta.rol === 'admin' ? 'danger' : 'secondary'}>
+                                                        {venta.rol || 'vendedor'}
+                                                    </Badge>
+                                                </td>
+                                                <td className="text-muted">
+                                                    ${parseFloat(venta.descuento_aplicado || 0).toFixed(2)}
+                                                </td>
+                                                <td className="fw-bold text-success">
+                                                    ${parseFloat(venta.total).toFixed(2)}
+                                                </td>
+                                                <td className="text-muted">
+                                                    {venta.fecha_venta ? new Date(venta.fecha_venta).toLocaleString('es-MX') : '---'}
+                                                </td>
+                                                <td>
+                                                    <Button 
+                                                        variant="outline-secondary" 
+                                                        className="btn-sm py-0 px-2"
+                                                        style={{ fontSize: '0.72rem', height: '24px' }}
+                                                        onClick={() => handleVerDetallesTicket(venta.id)}
+                                                    >
+                                                        👁️ Ver Detalle
+                                                    </Button>
+                                                </td>
                                             </tr>
-                                        ) : (
-                                            ventasData.map((venta, i) => (
-                                                <tr key={i} className="border-bottom">
-                                                    <td className="fw-bold text-secondary">#V-{venta.id}</td>
-                                                    <td>{venta.vendedor_name || 'Desconocido'}</td>
-                                                    <td>
-                                                        <Badge bg={venta.rol === 'admin' ? 'danger' : 'secondary'}>
-                                                            {venta.rol || 'vendedor'}
-                                                        </Badge>
-                                                    </td>
-                                                    <td className="text-muted">
-                                                        ${parseFloat(venta.descuento_aplicado || 0).toFixed(2)}
-                                                    </td>
-                                                    <td className="fw-bold text-success">
-                                                        ${parseFloat(venta.total).toFixed(2)}
-                                                    </td>
-                                                    <td className="text-muted">
-                                                        {venta.fecha_venta ? new Date(venta.fecha_venta).toLocaleString('es-MX') : '---'}
-                                                    </td>
-                                                    <td>
-                                                        <Button 
-                                                            variant="outline-secondary" 
-                                                            className="btn-sm py-0 px-2"
-                                                            style={{ fontSize: '0.72rem', height: '24px' }}
-                                                            onClick={() => handleVerDetallesTicket(venta.id)}
-                                                        >
-                                                            👁️ Ver Detalle
-                                                        </Button>
-                                                    </td>
-                                                </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </Table>
-                            </div>
-                        )}
-                        {/* ====== MODAL INTERACTIVO: DESGLOSE DE TICKET ESTILO SMARTBOUTIQUE ====== */}
-                        <Modal show={showTicketModal} onHide={() => setShowTicketModal(false)} centered size="sm">
-                            <Modal.Body className="p-4" style={{ fontFamily: 'Courier New, Courier, monospace', backgroundColor: '#ffffff' }}>
-                                
-                                {/* Encabezado del Ticket */}
-                                <div className="text-center mb-3">
-                                    <h5 className="fw-bold m-0" style={{ color: '#ad1457', letterSpacing: '1px' }}>✨ SMART BOUTIQUE ✨</h5>
-                                    <small className="text-muted d-block" style={{ fontSize: '0.75rem' }}>Instituto Tecnológico Superior de Apatzingán</small>
-                                    <small className="text-muted d-block" style={{ fontSize: '0.7rem' }}>Soporte de Sistemas</small>
-                                    <div className="my-2" style={{ borderTop: '1px dashed #ced4da' }}></div>
-                                    <span className="fw-bold d-block small">COMPROBANTE DE VENTA</span>
-                                    <span className="text-secondary small">Folio: #V-{folioSeleccionado}</span>
-                                </div>
-
-                                {/* Cuerpo del Desglose */}
-                                <div className="mb-3">
-                                    <div className="d-flex justify-content-between fw-bold text-secondary" style={{ fontSize: '0.75rem' }}>
-                                        <span>DESCRIPCIÓN</span>
-                                        <span>CANT x PRECIO</span>
-                                    </div>
-                                    <div className="my-1" style={{ borderTop: '1px dashed #ced4da' }}></div>
-
-                                    {/* Mapeo dinámico de los artículos que vienen desde AWS */}
-                                    {detallesTicket.map((item, i) => (
-                                        <div key={i} className="mb-2" style={{ fontSize: '0.75rem', lineHeight: '1.2' }}>
-                                            <div className="fw-bold text-dark text-uppercase">{item.nombre_prenda}</div>
-                                            <div className="d-flex justify-content-between text-muted ps-2">
-                                                <span>{item.cantidad} pza(s) x ${parseFloat(item.precio_unitario).toFixed(2)}</span>
-                                                <span className="fw-bold text-dark">
-                                                    ${(item.cantidad * parseFloat(item.precio_unitario)).toFixed(2)}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Totales del Ticket */}
+                                        ))
+                                    )}
+                                </tbody>
+                            </Table>
+                        </div>
+                    )}
+                    {/* ====== MODAL INTERACTIVO: DESGLOSE DE TICKET COMPLETO CON DESCUENTOS ====== */}
+                    <Modal show={showTicketModal} onHide={() => setShowTicketModal(false)} centered size="sm">
+                        <Modal.Body className="p-4" style={{ fontFamily: 'Courier New, Courier, monospace', backgroundColor: '#ffffff' }}>
+                            
+                            {/* Encabezado del Ticket */}
+                            <div className="text-center mb-3">
+                                <h5 className="fw-bold m-0" style={{ color: '#ad1457', letterSpacing: '1px' }}>✨ SMART BOUTIQUE ✨</h5>
+                                <small className="text-muted d-block" style={{ fontSize: '0.75rem' }}>Instituto Tecnológico Superior de Apatzingán</small>
+                                <small className="text-muted d-block" style={{ fontSize: '0.7rem' }}>Soporte de Sistemas</small>
                                 <div className="my-2" style={{ borderTop: '1px dashed #ced4da' }}></div>
+                                <span className="fw-bold d-block small">COMPROBANTE DE VENTA</span>
+                                <span className="text-secondary small">Folio: #V-{folioSeleccionado}</span>
+                            </div>
+
+                            {/* Cuerpo del Desglose de Artículos */}
+                            <div className="mb-3">
+                                <div className="d-flex justify-content-between fw-bold text-secondary" style={{ fontSize: '0.75rem' }}>
+                                    <span>DESCRIPCIÓN</span>
+                                    <span>CANT x PRECIO</span>
+                                </div>
+                                <div className="my-1" style={{ borderTop: '1px dashed #ced4da' }}></div>
+
+                                {/* Mapeo dinámico de los artículos que vienen desde AWS */}
+                                {detallesTicket.map((item, i) => (
+                                    <div key={i} className="mb-2" style={{ fontSize: '0.75rem', lineHeight: '1.2' }}>
+                                        <div className="fw-bold text-dark text-uppercase">{item.nombre_prenda}</div>
+                                        <div className="d-flex justify-content-between text-muted ps-2">
+                                            <span>{item.cantidad} pza(s) x ${parseFloat(item.precio_unitario).toFixed(2)}</span>
+                                            <span className="fw-bold text-dark">
+                                                ${(item.cantidad * parseFloat(item.precio_unitario)).toFixed(2)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Totales de Operación Desglosados */}
+                            <div className="my-2" style={{ borderTop: '1px dashed #ced4da' }}></div>
+                            <div style={{ fontSize: '0.75rem', lineHeight: '1.4' }}>
+                                
+                                {/* 1. Cálculo del precio real original de catálogo (Subtotal) */}
+                                <div className="d-flex justify-content-between text-muted">
+                                    <span>PRECIO REAL (SUBTOTAL):</span>
+                                    <span>
+                                        ${detallesTicket.reduce((acc, item) => {
+                                            const prodOriginal = productos.find(p => p.id === item.producto_id);
+                                            const precioOriginal = prodOriginal ? parseFloat(prodOriginal.precio) : parseFloat(item.precio_unitario);
+                                            return acc + (item.cantidad * precioOriginal);
+                                        }, 0).toFixed(2)}
+                                    </span>
+                                </div>
+
+                                {/* 2. Dinero total que se ahorró el cliente (Solo visible si hubo un descuento real) */}
+                                {detallesTicket.reduce((acc, item) => {
+                                    const prodOriginal = productos.find(p => p.id === item.producto_id);
+                                    const precioOriginal = prodOriginal ? parseFloat(prodOriginal.precio) : parseFloat(item.precio_unitario);
+                                    return acc + ((precioOriginal - parseFloat(item.precio_unitario)) * item.cantidad);
+                                }, 0) > 0 && (
+                                    <div className="d-flex justify-content-between text-danger fw-bold">
+                                        <span>DESCUENTO APLICADO:</span>
+                                        <span>
+                                            -${detallesTicket.reduce((acc, item) => {
+                                                const prodOriginal = productos.find(p => p.id === item.producto_id);
+                                                const precioOriginal = prodOriginal ? parseFloat(prodOriginal.precio) : parseFloat(item.precio_unitario);
+                                                return acc + ((precioOriginal - parseFloat(item.precio_unitario)) * item.cantidad);
+                                            }, 0).toFixed(2)}
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div className="my-1" style={{ borderTop: '1px dashed #ced4da' }}></div>
+
+                                {/* 3. Total Neto Final de la Transacción */}
                                 <div className="d-flex justify-content-between fw-bold mb-3" style={{ fontSize: '0.85rem' }}>
                                     <span>TOTAL COBRADO:</span>
                                     <span className="text-success">
                                         ${detallesTicket.reduce((acc, item) => acc + (item.cantidad * parseFloat(item.precio_unitario)), 0).toFixed(2)}
                                     </span>
                                 </div>
+                            </div>
 
-                                {/* Pie de Ticket */}
-                                <div className="text-center mt-4">
-                                    <p className="m-0 small fw-bold text-muted" style={{ fontSize: '0.7rem' }}>¡Gracias por tu compra! 👑</p>
-                                    <small className="text-muted" style={{ fontSize: '0.6rem' }}>SmartBoutique POS v5.0 - Cloud Infrastructure</small>
-                                    
-                                    <Button 
-                                        variant="dark" 
-                                        size="sm" 
-                                        className="w-100 mt-3 btn-sm border-0" 
-                                        style={{ backgroundColor: '#ad1457', fontSize: '0.75rem' }}
-                                        onClick={() => setShowTicketModal(false)}
-                                    >
-                                        Cerrar Ticket
-                                    </Button>
-                                </div>
+                            {/* Pie de Ticket */}
+                            <div className="text-center mt-4">
+                                <p className="m-0 small fw-bold text-muted" style={{ fontSize: '0.7rem' }}>¡Gracias por tu compra! 👑</p>
+                                <small className="text-muted" style={{ fontSize: '0.6rem' }}>SmartBoutique POS v5.0 - Cloud Infrastructure</small>
+                                
+                                <Button 
+                                    variant="dark" 
+                                    size="sm" 
+                                    className="w-100 mt-3 btn-sm border-0" 
+                                    style={{ backgroundColor: '#ad1457', fontSize: '0.75rem' }}
+                                    onClick={() => setShowTicketModal(false)}
+                                >
+                                    Cerrar Ticket
+                                </Button>
+                            </div>
 
-                            </Modal.Body>
-                        </Modal>
+                        </Modal.Body>
+                    </Modal>
+                       
                         {vistaActiva === 'devoluciones' && (
                             <div className="animate__animated animate__fadeIn">
                                 <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>↩️ Control de Devoluciones</h5>
