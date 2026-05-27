@@ -1503,49 +1503,158 @@ const AdminDashboard = () => {
                        
                         {vistaActiva === 'devoluciones' && (
                             <div className="animate__animated animate__fadeIn">
-                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>↩️ Control de Devoluciones</h5>
-                                <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
-                                    <thead className="table-light">
-                                        <tr>
-                                            <th>Folio Devolución</th>
-                                            <th>Ticket Orig.</th>
-                                            <th>Prenda / Artículo</th>
-                                            <th>Cant.</th>
-                                            <th>Motivo</th>
-                                            <th>Total Reembolsado</th>
-                                            <th>Método</th>
-                                            <th>Autorizó</th>
-                                            <th>Fecha y Hora</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {devolucionesData.length === 0 ? (
+                                
+                                {/* ================================================================= */}
+                                {/* 📋 FORMULARIO DE REGISTRO: TARJETA PREMIUM PARA LLENAR CAMPOS */}
+                                {/* ================================================================= */}
+                                <Card className="mb-4 shadow-sm border-0" style={{ borderRadius: '14px', backgroundColor: '#fffdfd', border: '1px solid #f8bbd0' }}>
+                                    <Card.Body className="p-4">
+                                        <h5 className="fw-bold mb-3 d-flex align-items-center" style={{ color: '#ad1457' }}>
+                                            ↩️ Registro de Devolución
+                                        </h5>
+                                        <p className="text-muted small mb-4">
+                                            Ingresa los datos del ticket original y la prenda para restaurar el stock automáticamente en el catálogo y registrar el movimiento financiero.
+                                        </p>
+                                        
+                                        <Form onSubmit={async (e) => {
+                                            e.preventDefault();
+                                            const form = e.target;
+                                            
+                                            const datosDevolucion = {
+                                                venta_id: parseInt(form.venta_id.value),
+                                                producto_detalle: form.producto_detalle.value,
+                                                cantidad: parseInt(form.cantidad.value),
+                                                motivo_devolucion: form.motivo_devolucion.value,
+                                                monto_reembolsado: parseFloat(form.monto_reembolsado.value),
+                                                tipo_reembolso: form.tipo_reembolso.value,
+                                                usuario_id: 1 // ID de admin_sofi
+                                            };
+
+                                            try {
+                                                const response = await fetch('http://34.219.103.28:3000/api/productos/devoluciones', {
+                                                    method: 'POST',
+                                                    headers: { 
+                                                        'Content-Type': 'application/json',
+                                                        ...getAuthHeaders() 
+                                                    },
+                                                    body: JSON.stringify(datosDevolucion)
+                                                });
+
+                                                if (response.ok) {
+                                                    Swal.fire({
+                                                        title: '¡Devolución Procesada!',
+                                                        text: 'El movimiento fue guardado y el stock del producto ha sido restaurado con éxito.',
+                                                        icon: 'success',
+                                                        confirmButtonColor: '#ad1457'
+                                                    });
+                                                    form.reset(); // Limpia los campos del formulario para una nueva captura
+                                                    cargarDatosAdmin(); // Actualiza la tabla histórica de abajo en caliente
+                                                } else {
+                                                    Swal.fire('⚠️ Error', 'No se pudo registrar la devolución. Verifica el folio.', 'error');
+                                                }
+                                            } catch (error) {
+                                                console.error(error);
+                                                Swal.fire('❌ Error', 'Error de comunicación con el servidor RDS.', 'error');
+                                            }
+                                        }}>
+                                            <Row className="g-3">
+                                                <Col md={2}>
+                                                    <Form.Group>
+                                                        <Form.Label className="small fw-bold text-muted">Ticket Orig. (#V)</Form.Label>
+                                                        <Form.Control type="number" name="venta_id" placeholder="Ej: 21" size="sm" required />
+                                                    </Form.Group>
+                                                </Col>
+                                                <Col md={4}>
+                                                    <Form.Group>
+                                                        <Form.Label className="small fw-bold text-muted">Prenda / Artículo</Form.Label>
+                                                        <Form.Control type="text" name="producto_detalle" placeholder="Ej: VESTIDO MIDI FLORAL" size="sm" required />
+                                                    </Form.Group>
+                                                </Col>
+                                                <Col md={2}>
+                                                    <Form.Group>
+                                                        <Form.Label className="small fw-bold text-muted">Cantidad Regresada</Form.Label>
+                                                        <Form.Control type="number" name="cantidad" min="1" placeholder="1" size="sm" required />
+                                                    </Form.Group>
+                                                </Col>
+                                                <Col md={2}>
+                                                    <Form.Group>
+                                                        <Form.Label className="small fw-bold text-muted">Total Reembolso ($)</Form.Label>
+                                                        <Form.Control type="number" step="0.01" name="monto_reembolsado" placeholder="0.00" size="sm" required />
+                                                    </Form.Group>
+                                                </Col>
+                                                <Col md={2}>
+                                                    <Form.Group>
+                                                        <Form.Label className="small fw-bold text-muted">Método Aplicado</Form.Label>
+                                                        <Form.Select name="tipo_reembolso" size="sm">
+                                                            <option value="Efectivo">💵 Efectivo</option>
+                                                            <option value="Nota de Crédito">🎟️ Nota de Crédito</option>
+                                                        </Form.Select>
+                                                    </Form.Group>
+                                                </Col>
+                                                <Col md={12}>
+                                                    <Form.Group>
+                                                        <Form.Label className="small fw-bold text-muted">Motivo Detallado de la Devolución</Form.Label>
+                                                        <Form.Control type="text" name="motivo_devolucion" placeholder="Ej: Costura dañada en cierre / Cambio de talla por solicitud del cliente" size="sm" required />
+                                                    </Form.Group>
+                                                </Col>
+                                                <Col md={12} className="text-end mt-3">
+                                                    <Button type="submit" size="sm" style={{ backgroundColor: '#ad1457', borderColor: '#ad1457' }} className="fw-bold px-4 shadow-sm text-white">
+                                                        ↩️ Ejecutar Reembolso y Restaurar Stock
+                                                    </Button>
+                                                </Col>
+                                            </Row>
+                                        </Form>
+                                    </Card.Body>
+                                </Card>
+
+                                {/* ================================================================= */}
+                                {/* 📊 TABLA HISTÓRICA: CONSULTA DE LO QUE YA SE DEVOLVIÓ */}
+                                {/* ================================================================= */}
+                                <div className="bg-white rounded-4 p-3 shadow-sm border">
+                                    <h6 className="fw-bold text-secondary mb-3 small">📋 Bitácora Histórica de Devoluciones</h6>
+                                    <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
+                                        <thead className="table-light">
                                             <tr>
-                                                <td colSpan="9" className="text-muted py-3">No hay devoluciones registradas hoy.</td>
+                                                <th>Folio Devolución</th>
+                                                <th>Ticket Orig.</th>
+                                                <th>Prenda / Artículo</th>
+                                                <th>Cant.</th>
+                                                <th>Motivo</th>
+                                                <th>Total Reembolsado</th>
+                                                <th>Método</th>
+                                                <th>Autorizó</th>
+                                                <th>Fecha y Hora</th>
                                             </tr>
-                                        ) : (
-                                            devolucionesData.map((dev, i) => (
-                                                <tr key={i} className="border-bottom">
-                                                    <td className="fw-bold text-secondary">#DEV-{dev.id}</td>
-                                                    <td className="text-muted">#V-{dev.venta_id}</td>
-                                                    <td className="text-start">{dev.producto_detalle}</td>
-                                                    <td>{dev.cantidad}</td>
-                                                    <td className="text-muted text-start" style={{ fontSize: '0.8rem' }}>{dev.motivo_devolucion}</td>
-                                                    <td className="fw-bold text-danger">-${parseFloat(dev.monto_reembolsado).toFixed(2)}</td>
-                                                    <td>
-                                                        <Badge bg={dev.tipo_reembolso === 'Nota de Crédito' ? 'purple' : 'dark'} style={{ backgroundColor: dev.tipo_reembolso === 'Nota de Crédito' ? '#7b1fa2' : '#616161' }}>
-                                                            {dev.tipo_reembolso}
-                                                        </Badge>
-                                                    </td>
-                                                    <td><Badge bg="secondary">{dev.operador_name || 'admin'}</Badge></td>
-                                                    <td className="text-muted" style={{ fontSize: '0.8rem' }}>
-                                                        {dev.fecha_devolucion ? new Date(dev.fecha_devolucion).toLocaleString('es-MX') : '---'}
-                                                    </td>
+                                        </thead>
+                                        <tbody>
+                                            {devolucionesData.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="9" className="text-muted py-3">No hay devoluciones registradas en el sistema todavía.</td>
                                                 </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </Table>
+                                            ) : (
+                                                devolucionesData.map((dev, i) => (
+                                                    <tr key={i} className="border-bottom">
+                                                        <td className="fw-bold text-secondary">#DEV-{dev.id}</td>
+                                                        <td className="text-muted">#V-{dev.venta_id}</td>
+                                                        <td className="text-start text-uppercase">{dev.producto_detalle}</td>
+                                                        <td>{dev.cantidad} pz</td>
+                                                        <td className="text-muted text-start" style={{ fontSize: '0.8rem' }}>{dev.motivo_devolucion}</td>
+                                                        <td className="fw-bold text-danger">-${parseFloat(dev.monto_reembolsado).toFixed(2)}</td>
+                                                        <td>
+                                                            <Badge bg={dev.tipo_reembolso === 'Nota de Crédito' ? 'purple' : 'dark'} style={{ backgroundColor: dev.tipo_reembolso === 'Nota de Crédito' ? '#7b1fa2' : '#616161' }}>
+                                                                {dev.tipo_reembolso}
+                                                            </Badge>
+                                                        </td>
+                                                        <td><Badge bg="secondary">admin_sofi</Badge></td>
+                                                        <td className="text-muted" style={{ fontSize: '0.8rem' }}>
+                                                            {dev.fecha_devolucion ? new Date(dev.fecha_devolucion).toLocaleString('es-MX') : '---'}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </Table>
+                                </div>
                             </div>
                         )}
                     </div>

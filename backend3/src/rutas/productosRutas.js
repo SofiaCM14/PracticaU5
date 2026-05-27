@@ -329,6 +329,91 @@ router.get('/devoluciones', verificarToken, async (req, res) => {
         res.status(500).json({ error: 'No se pudo cargar el historial de devoluciones.' });
     }
 });
+// =================================================================
+// ↩️ NUEVO ENDPOINT: PROCESAR REGISTRO DE DEVOLUCIÓN (POST)
+// =================================================================
+router.post('/devoluciones', verificarToken, async (req, res) => {
+    const { 
+        venta_id, 
+        producto_detalle, 
+        cantidad, 
+        motivo_devolucion, 
+        monto_reembolsado, 
+        tipo_reembolso 
+    } = req.body;
+    
+    // Tomamos el usuario del token o por defecto el id 1 (admin_sofi)
+    const idOperador = req.usuario_id || 1; 
+
+    try {
+        // Iniciamos un bloque transaccional seguro
+        await pool.query('BEGIN');
+
+        // 1. Inyectamos la devolución en tu tabla (Mapeada idéntica a tus capturas)
+        const queryInsertDev = `
+            INSERT INTO devoluciones (
+                venta_id, producto_detalle, cantidad, motivo_devolucion, 
+                monto_reembolsado, tipo_reembolso, usuario_id, fecha_devolucion
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
+            RETURNING id;
+        `;
+        const resDev = await pool.query(queryInsertDev, [
+            parseInt(venta_id),
+            producto_detalle,
+            parseInt(cantidad),
+            motivo_devolucion,
+            parseFloat(monto_reembolsado),
+            tipo_reembolso,
+            idOperador
+        ]);
+        const devId = resDev.rows[0].id;
+
+        // 2. 🎯 ESTRATEGIA DE STOCK: Buscamos el ID físico de la prenda usando el nombre exacto
+        const queryBuscarProd = `
+            SELECT id FROM productos 
+            WHERE UPPER(nombre) = UPPER($1) 
+            LIMIT 1;
+        `;
+        const resProd = await pool.query(queryBuscarProd, [producto_detalle.trim()]);
+
+        if (resProd.rows.length > 0) {
+            const productoIdReal = resProd.rows[0].id;
+            
+            // Reintegramos las piezas sumándolas al stock actual en AWS RDS
+            const queryUpdateStock = `
+                UPDATE productos 
+                SET stock = stock + $1 
+                WHERE id = $2;
+            `;
+            await pool.query(queryUpdateStock, [parseInt(cantidad), productoIdReal]);
+        } else {
+            console.log(`⚠️ Advertencia: No se encontró la prenda "${producto_detalle}" en el catálogo. Se guardó el reporte financiero, pero no se alteró el stock.`);
+        }
+
+        // 3. Dejamos evidencia transparente en tu bitácora de Auditoría global
+        const queryAuditoria = `
+            INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) 
+            VALUES ($1, $2, $3, NOW());
+        `;
+        const detalleAccion = `DEVOLUCIÓN #DEV-${devId} (Venta #V-${venta_id}). Reintegrado: ${cantidad} pz de "${producto_detalle.toUpperCase()}". Reembolso: $${parseFloat(monto_reembolsado).toFixed(2)} [${tipo_reembolso}].`;
+        await pool.query(queryAuditoria, [idOperador, 'REGISTRO_DEVOLUCION', detalleAccion]);
+
+        // Guardamos de forma definitiva en la base de datos cloud
+        await pool.query('COMMIT');
+        
+        res.status(201).json({ 
+            ok: true, 
+            message: "Devolución registrada exitosamente y stock sincronizado.", 
+            devolucion_id: devId 
+        });
+
+    } catch (error) {
+        await pool.query('ROLLBACK');
+        console.error("Error crítico procesando la devolución:", error);
+        res.status(500).json({ error: "No se pudo completar el procesamiento de la devolución." });
+    }
+});
 router.post('/caja', async (req, res) => {
     const { tipo, monto, usuario, rol } = req.body; 
     const client = await pool.connect();
