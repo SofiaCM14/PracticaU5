@@ -229,32 +229,58 @@ router.put('/:id', async (req, res) => {
 });
 
 // 🛍️ ENDPOINT CORREGIDO: OBTENER VENTAS DEL TURNO ACTIVO (GET)
+// =================================================================
+// 🛍️ ENDPOINT 1: OBTENER VENTAS DEL TURNO (GET)
+// =================================================================
 router.get('/ventas', verificarToken, async (req, res) => {
     try {
-        // 1. Buscamos si existe una caja abierta actualmente
-        const queryCaja = `SELECT fecha_apertura FROM movimientos_caja WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1;`;
-        const resCaja = await pool.query(queryCaja);
-
-        // Si no hay ninguna caja abierta, limpiamos el historial visual mandando 0 filas
-        if (resCaja.rows.length === 0) {
-            return res.status(200).json([]);
-        }
-
-        const fechaApertura = resCaja.rows[0].fecha_apertura;
-
-        // 2. Traemos las columnas con sus nombres NATIVOS e idénticos a como los lee tu Front
+        // Traemos las últimas ventas del usuario para que la tabla siempre tenga registros visuales
+        // y puedas darle clic a "Ver Detalle" en cualquier momento.
         const queryVentas = `
             SELECT id, usuario_id, total, fecha_venta, descuento
             FROM ventas 
-            WHERE fecha_venta >= $1
-            ORDER BY id DESC;
+            ORDER BY id DESC LIMIT 50;
         `;
-        const resVentas = await pool.query(queryVentas, [fechaApertura]);
+        const resVentas = await pool.query(queryVentas);
         res.status(200).json(resVentas.rows);
 
     } catch (error) {
-        console.error("Error al obtener las ventas del turno:", error);
+        console.error("Error al obtener el historial de ventas:", error);
         res.status(500).json({ error: "No se pudieron obtener las ventas." });
+    }
+});
+// 📄 ENDPOINT 2: DESGLOSE DE PRENDAS DE UN CORTE ESPECÍFICO (GET)
+router.get('/movimientos-caja/detalles-ticket/:id', verificarToken, async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        // 1. Obtener los datos y horas exactas de esa caja en específico
+        const queryCaja = `SELECT fecha_apertura, fecha_cierre FROM movimientos_caja WHERE id = $1;`;
+        const resCaja = await pool.query(queryCaja, [id]);
+
+        if (resCaja.rows.length === 0) {
+            return res.status(404).json({ error: "Corte de caja no encontrado." });
+        }
+
+        const { fecha_apertura, fecha_cierre } = resCaja.rows[0];
+        const limiteCierre = fecha_cierre ? fecha_cierre : new Date();
+
+        // 2. Capturar absolutamente todas las ventas de prendas en ese rango exacto
+        const queryArticulos = `
+            SELECT p.nombre AS prenda, dv.cantidad, dv.precio_unitario, (dv.cantidad * dv.precio_unitario) AS subtotal
+            FROM detalle_ventas dv
+            JOIN ventas v ON dv.venta_id = v.id
+            JOIN productos p ON dv.producto_id = p.id
+            WHERE v.fecha_venta >= $1 AND v.fecha_venta <= $2
+            ORDER BY v.id ASC;
+        `;
+        
+        const resArticulos = await pool.query(queryArticulos, [fecha_apertura, limiteCierre]);
+        res.status(200).json(resArticulos.rows);
+
+    } catch (error) {
+        console.error("Error al obtener desglose del corte:", error);
+        res.status(500).json({ error: "No se pudo procesar el desglose del ticket." });
     }
 });
 router.get('/devoluciones', verificarToken, async (req, res) => {

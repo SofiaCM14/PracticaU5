@@ -127,22 +127,58 @@ const AdminDashboard = () => {
             console.error("Error de conectividad AWS RDS:", error);
         }
     };
-    const handleVerDetallesTicket = async (id) => {
-        try {
-            setFolioSeleccionado(id);
-            const res = await fetch(`http://34.219.103.28:3000/api/productos/ventas/detalles/${id}`, {
-                method: 'GET',
-                headers: getAuthHeaders()
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setDetallesTicket(data); // Guarda los Jeans Mom en el estado
-                setShowTicketModal(true); // ──> 🟢 ¡Abre tu nuevo modal tipo ticket aquí!
-            }
-        } catch (error) {
-            console.error("Error cargando detalles:", error);
-        }
-    };
+    const handleVerDetalleVenta = async (ventaId) => {
+    try {
+        const authHeaders = getAuthHeaders();
+        // Cambia este fetch según el endpoint real que tengas para los detalles de la venta
+        const response = await fetch(`http://34.219.103.28:3000/api/productos/ventas/${ventaId}`, {
+            method: 'GET',
+            headers: authHeaders
+        });
+        const datosVenta = await response.json();
+
+        const ventana = window.open('', '_blank', 'width=420,height=600,scrollbars=yes');
+        ventana.document.write(`
+            <html>
+            <head>
+                <title>Ticket de Venta #V-${ventaId}</title>
+                <style>
+                    body { font-family: 'Courier New', monospace; width: 300px; margin: 0 auto; padding: 20px 10px; }
+                    .text-center { text-align: center; }
+                    .linea-divisoria { border-top: 1px dashed #000; margin: 8px 0; }
+                    .flex-justify { display: flex; justify-content: space-between; }
+                    
+                    /* 🔘 ZONA DE BOTONES INTERACTIVOS */
+                    .botones-container { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+                    .btn-ticket { border: none; padding: 6px 12px; font-size: 11px; font-weight: bold; border-radius: 4px; cursor: pointer; font-family: Arial, sans-serif; }
+                    .btn-print { background-color: #2e7d32; color: white; }
+                    .btn-close { background-color: #757575; color: white; }
+                    
+                    @media print { .botones-container { display: none !important; } }
+                </style>
+            </head>
+            <body>
+                <div class="botones-container">
+                    <button class="btn-ticket btn-print" onclick="window.print()">🖨️ Imprimir</button>
+                    <button class="btn-ticket btn-close" onclick="window.close()">❌ Cerrar</button>
+                </div>
+
+                <div class="text-center">
+                    <h3 style="margin:0;">✨ SmartBoutique ✨</h3>
+                    <p style="margin:2px 0; font-size:11px;">TICKET DE VENTA #V-${ventaId}</p>
+                </div>
+                <div class="linea-divisoria"></div>
+                <div class="flex-justify"><span>TOTAL COBRADO:</span><b>$${parseFloat(datosVenta.total || 0).toFixed(2)}</b></div>
+                <div class="linea-divisoria"></div>
+                <div class="text-center" style="font-size: 10px;">¡Gracias por tu compra!</div>
+            </body>
+            </html>
+        `);
+        ventana.document.close();
+    } catch (error) {
+        console.error("Error al generar ticket de venta:", error);
+    }
+};
         // 1. Agregar un artículo al carrito temporal
     const handleAgregarAlCarrito = (e) => {
         e.preventDefault();
@@ -521,28 +557,25 @@ const AdminDashboard = () => {
    const handleImprimirTicketCorte = async (datosCaja) => {
     try {
         const authHeaders = getAuthHeaders();
-        // 📡 Consultamos al backend el desglose de artículos
         const response = await fetch(`http://34.219.103.28:3000/api/productos/movimientos-caja/detalles-ticket/${datosCaja.id}`, {
             method: 'GET',
             headers: authHeaders
         });
 
-        if (!response.ok) throw new Error("No se pudo obtener el desglose de artículos.");
+        if (!response.ok) throw new Error("No se pudo obtener el desglose.");
         const articulosVendidos = await response.json();
 
-        // 🧮 Cálculos financieros
         const fondoInicial = parseFloat(datosCaja.monto_inicial) || 0;
         const montoFinal = parseFloat(datosCaja.monto_final) || 0;
         const totalVentas = montoFinal > 0 ? (montoFinal - fondoInicial) : 0;
 
-        // 📄 Abrimos la ventana del ticket (Sin el auto-print inmediato)
         const ventanaImpresion = window.open('', '_blank', 'width=420,height=700,scrollbars=yes');
         ventanaImpresion.document.write(`
             <html>
             <head>
                 <title>Ticket de Corte de Caja - #C-${datosCaja.id}</title>
                 <style>
-                    body { font-family: 'Courier New', Courier, monospace; width: 300px; margin: 0 auto; padding: 20px 10px; font-size: 12px; color: #000; background-color: #fff; }
+                    body { font-family: 'Courier New', monospace; width: 300px; margin: 0 auto; padding: 20px 10px; font-size: 12px; color: #000; }
                     .text-center { text-align: center; }
                     .fw-bold { font-weight: bold; }
                     .linea-divisoria { border-top: 1px dashed #000; margin: 8px 0; }
@@ -550,78 +583,56 @@ const AdminDashboard = () => {
                     .grand-total { font-size: 13px; font-weight: bold; margin-top: 4px; }
                     .tabla-prendas { width: 100%; margin: 6px 0; font-size: 11px; border-collapse: collapse; }
                     .tabla-prendas th { text-align: left; border-bottom: 1px dashed #000; padding-bottom: 3px; }
-                    .tabla-prendas td { padding: 3px 0; }
                     
-                    /* 🖨️ ESTILOS DEL BOTÓN DE ACCIÓN INTERACTIVO */
-                    .no-print-zone { 
-                        display: flex; 
-                        justify-content: center; 
-                        margin-bottom: 25px; 
-                    }
-                    .btn-print { 
-                        background-color: #2e7d32; 
-                        color: white; 
-                        border: none; 
-                        padding: 8px 16px; 
-                        font-size: 12px; 
-                        font-weight: bold; 
-                        border-radius: 6px; 
-                        cursor: pointer; 
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                        font-family: Arial, sans-serif;
-                    }
-                    .btn-print:hover { background-color: #1b5e20; }
+                    /* 🔘 ACCIONES INTERACTIVAS DEL TICKET DE CORTE */
+                    .botones-container { display: flex; gap: 10px; justify-content: center; margin-bottom: 25px; }
+                    .btn-action { border: none; padding: 8px 14px; font-size: 12px; font-weight: bold; border-radius: 6px; cursor: pointer; font-family: Arial, sans-serif; }
+                    .btn-download { background-color: #2e7d32; color: white; }
+                    .btn-close { background-color: #c2185b; color: white; }
 
-                    /* Oculta el botón por completo cuando se mande a la impresora física o a PDF */
                     @media print {
-                        .no-print-zone { display: none !important; }
-                        body { margin: 0; padding: 10px; width: 100%; }
+                        .botones-container { display: none !important; }
+                        body { margin: 0; padding: 10px; }
                     }
                 </style>
             </head>
             <body>
                 
-                <div class="no-print-zone">
-                    <button class="btn-print" onclick="window.print()">🖨️ Imprimir o Guardar Ticket</button>
+                <div class="botones-container">
+                    <button class="btn-action btn-download" onclick="window.print()">🖨️ Imprimir / Guardar</button>
+                    <button class="btn-action btn-close" onclick="window.close()">❌ Cerrar Vista</button>
                 </div>
 
                 <div class="text-center">
                     <h3 style="margin:0; text-transform: uppercase;">✨ SmartBoutique ✨</h3>
-                    <p style="margin:2px 0;">SISTEMA DE AUDITORÍA CLOUD</p>
-                    <p style="margin:2px 0; font-size:10px;">Apatzingán, Michoacán</p>
+                    <p style="margin:2px 0; font-size:10px;">SISTEMA DE AUDITORÍA CLOUD</p>
                 </div>
                 
                 <div class="linea-divisoria"></div>
-                
                 <div class="text-center fw-bold">📜 REPORTE X - CORTE DE CAJA 📜</div>
                 <div style="margin-top: 6px; font-size:11px;">
                     <div><b>Corte Folio:</b> #C-${datosCaja.id}</div>
-                    <div><b>Usuario:</b> admin_sofi (ID: ${datosCaja.usuario_id})</div>
+                    <div><b>Usuario:</b> admin_sofi</div>
                     <div><b>Estado:</b> ${datosCaja.estado.toUpperCase()}</div>
                     <div><b>Apertura:</b> ${datosCaja.fecha_apertura ? new Date(datosCaja.fecha_apertura).toLocaleString('es-MX') : '---'}</div>
                     <div><b>Cierre:</b>   ${datosCaja.fecha_cierre ? new Date(datosCaja.fecha_cierre).toLocaleString('es-MX') : '---'}</div>
                 </div>
                 
                 <div class="linea-divisoria"></div>
-                
                 <div class="fw-bold text-center" style="font-size: 11px;">👕 DESGLOSE DE PRENDAS VENDIDAS</div>
                 <table class="tabla-prendas">
                     <thead>
                         <tr>
                             <th>Cant. / Articulo</th>
-                            <th style="text-align: right;">P.Unit</th>
                             <th style="text-align: right;">Total</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${articulosVendidos.length === 0 ? `
-                            <tr>
-                                <td colSpan="3" class="text-center" style="padding: 10px 0; color: #555;">No se registraron ventas en este turno.</td>
-                            </tr>
+                            <tr><td colSpan="2" class="text-center" style="padding: 10px 0;">No hubo ventas.</td></tr>
                         ` : articulosVendidos.map(art => `
                             <tr>
                                 <td>${art.cantidad}x ${art.prenda}</td>
-                                <td style="text-align: right;">$${parseFloat(art.precio_unitario).toFixed(2)}</td>
                                 <td style="text-align: right;">$${parseFloat(art.subtotal).toFixed(2)}</td>
                             </tr>
                         `).join('')}
@@ -629,37 +640,19 @@ const AdminDashboard = () => {
                 </table>
                 
                 <div class="linea-divisoria"></div>
-                
-                <div class="flex-justify">
-                    <span>(+) FONDO INICIAL:</span>
-                    <span>$${fondoInicial.toFixed(2)}</span>
-                </div>
-                <div class="flex-justify" style="margin-top: 3px;">
-                    <span>(+) VENTAS DEL TURNO:</span>
-                    <span class="fw-bold text-success">$${totalVentas.toFixed(2)}</span>
-                </div>
-                
+                <div class="flex-justify"><span>(+) FONDO INICIAL:</span><span>$${fondoInicial.toFixed(2)}</span></div>
+                <div class="flex-justify"><span>(+) VENTAS TURNO:</span><span class="fw-bold text-success">$${totalVentas.toFixed(2)}</span></div>
                 <div class="linea-divisoria"></div>
-                
                 <div class="flex-justify grand-total" style="border: 1px solid #000; padding: 4px;">
-                    <span>(=) EFECTIVO EN CAJA:</span>
-                    <span>$${montoFinal > 0 ? montoFinal.toFixed(2) : fondoInicial.toFixed(2)}</span>
-                </div>
-                
-                <div class="linea-divisoria" style="border-top: 1px dashed #000; margin-top: 15px;"></div>
-                
-                <div class="text-center" style="margin-top: 10px; font-size: 10px;">
-                    Arqueo correlacionado con base de datos AWS RDS.<br/><br/>
-                    <b>Firma Responsable: admin_sofi</b>
+                    <span>(=) TOTAL EN CAJA:</span><span>$${montoFinal > 0 ? montoFinal.toFixed(2) : fondoInicial.toFixed(2)}</span>
                 </div>
             </body>
             </html>
         `);
         ventanaImpresion.document.close();
-
     } catch (error) {
         console.error(error);
-        alert("❌ Error de comunicación al estructurar el desglose del ticket.");
+        Swal.fire('❌ Error', 'No se pudo generar el ticket de corte.', 'error');
     }
 };
     const handleDeleteUser = async (id) => {
