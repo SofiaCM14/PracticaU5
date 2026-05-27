@@ -428,27 +428,38 @@ const AdminDashboard = () => {
         }
     };
     const handleCerrarCaja = async () => {
-        if (!window.confirm("¿Estás segura de que deseas realizar el corte y cerrar la caja por hoy?")) return;
+        // 🔔 Mensaje de confirmación interactivo
+        const confirmar = window.confirm("¿Estás seguro de cerrar la caja?");
+        
+        // Si le picas a "Cancelar" (No), simplemente se cierra la alerta y no hace nada
+        if (!confirmar) return;
 
         try {
             const authHeaders = getAuthHeaders();
             const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/cerrar-caja', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...authHeaders },
-                body: JSON.stringify({ usuario_id: 1 }) 
+                body: JSON.stringify({ usuario_id: 1 }) // ID de admin_sofi
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                alert(`🔒 ¡Caja Cerrada Exitosamente!\n\n💰 Ventas del día: $${data.ventas_del_dia.toFixed(2)}\n💵 Total acumulado en Caja: $${data.monto_final.toFixed(2)}`);
-                cargarDatosAdmin(); // Actualiza la interfaz en tiempo real
+                alert(`🔒 ¡Caja Cerrada Exitosamente!\n\n💰 Ventas acumuladas en el turno: $${data.ventas_del_dia.toFixed(2)}\n💵 Total entregado en efectivo: $${data.monto_final.toFixed(2)}`);
+                
+                // 🔄 REFRESCAMOS TODO EN CALIENTE
+                cargarDatosAdmin(); 
+                
+                // Si tienes una función específica que cargue el historial de ventas en esa pestaña, la ejecutas aquí:
+                if (typeof cargarVentas === 'function') {
+                    cargarVentas(); 
+                }
             } else {
                 alert(`⚠️ Error: ${data.error}`);
             }
         } catch (error) {
             console.error("Error al conectar el cierre:", error);
-            alert("❌ Error de comunicación con el servidor.");
+            alert("❌ Error de comunicación con el servidor al procesar el arqueo.");
         }
     };
     const handleAbrirCajaDefinitivo = async (e) => {
@@ -487,53 +498,126 @@ const AdminDashboard = () => {
         }
     };
 
-    const handleImprimirTicketCorte = (datosCaja) => {
-        const ventanaImpresion = window.open('', '_blank', 'width=400,height=600');
+   const handleImprimirTicketCorte = async (datosCaja) => {
+    try {
+        const authHeaders = getAuthHeaders();
+        // 📡 Consultamos al backend el desglose de artículos de este corte en específico
+        const response = await fetch(`http://34.219.103.28:3000/api/productos/movimientos-caja/detalles-ticket/${datosCaja.id}`, {
+            method: 'GET',
+            headers: authHeaders
+        });
+
+        if (!response.ok) throw new Error("No se pudo obtener el desglose de artículos.");
+        const articulosVendidos = await response.json();
+
+        // 🧮 Cálculos financieros
         const fondoInicial = parseFloat(datosCaja.monto_inicial) || 0;
         const montoFinal = parseFloat(datosCaja.monto_final) || 0;
         const totalVentas = montoFinal > 0 ? (montoFinal - fondoInicial) : 0;
 
+        // 📄 Abrimos la ventana del ticket térmico
+        const ventanaImpresion = window.open('', '_blank', 'width=400,height=700');
         ventanaImpresion.document.write(`
             <html>
             <head>
-                <title>Ticket de Corte de Caja</title>
+                <title>Ticket de Corte de Caja - SmartBoutique</title>
                 <style>
-                    body { font-family: 'Courier New', Courier, monospace; width: 280px; margin: 0 auto; padding: 10px; font-size: 12px; color: #000; }
+                    body { font-family: 'Courier New', Courier, monospace; width: 290px; margin: 0 auto; padding: 10px; font-size: 12px; color: #000; }
                     .text-center { text-align: center; }
                     .fw-bold { font-weight: bold; }
                     .linea-divisoria { border-top: 1px dashed #000; margin: 8px 0; }
                     .flex-justify { display: flex; justify-content: space-between; }
-                    .grand-total { font-size: 14px; font-weight: bold; margin-top: 5px; }
+                    .grand-total { font-size: 13px; font-weight: bold; margin-top: 4px; }
+                    .tabla-prendas { width: 100%; margin: 6px 0; font-size: 11px; border-collapse: collapse; }
+                    .tabla-prendas th { text-align: left; border-bottom: 1px dashed #000; padding-bottom: 3px; }
+                    .tabla-prendas td { padding: 3px 0; }
                 </style>
             </head>
             <body>
                 <div class="text-center">
                     <h3 style="margin:0; text-transform: uppercase;">✨ SmartBoutique ✨</h3>
                     <p style="margin:2px 0;">SISTEMA DE AUDITORÍA CLOUD</p>
+                    <p style="margin:2px 0; font-size:10px;">Apatzingán, Michoacán</p>
                 </div>
+                
                 <div class="linea-divisoria"></div>
-                <div class="text-center fw-bold">📜 TICKET DE CORTE DE CAJA 📜</div>
-                <div style="margin-top: 6px;">
+                
+                <div class="text-center fw-bold">📜 REPORTE X - CORTE DE CAJA 📜</div>
+                <div style="margin-top: 6px; font-size:11px;">
                     <div><b>Corte Folio:</b> #C-${datosCaja.id}</div>
-                    <div><b>Operador ID:</b> ${datosCaja.usuario_id}</div>
+                    <div><b>Usuario:</b> admin_sofi (ID: ${datosCaja.usuario_id})</div>
                     <div><b>Estado:</b> ${datosCaja.estado.toUpperCase()}</div>
+                    <div><b>Apertura:</b> ${datosCaja.fecha_apertura ? new Date(datosCaja.fecha_apertura).toLocaleString('es-MX') : '---'}</div>
+                    <div><b>Cierre:</b>   ${datosCaja.fecha_cierre ? new Date(datosCaja.fecha_cierre).toLocaleString('es-MX') : '---'}</div>
                 </div>
+                
                 <div class="linea-divisoria"></div>
-                <div><b>Apertura:</b><br/> ${datosCaja.fecha_apertura ? new Date(datosCaja.fecha_apertura).toLocaleString('es-MX') : '---'}</div>
-                <div style="margin-top: 4px;"><b>Cierre:</b><br/> ${datosCaja.fecha_cierre ? new Date(datosCaja.fecha_cierre).toLocaleString('es-MX') : '---'}</div>
+                
+                <div class="fw-bold text-center" style="font-size: 11px;">👕 DESGLOSE DE PRENDAS VENDIDAS</div>
+                <table class="tabla-prendas">
+                    <thead>
+                        <tr>
+                            <th>Cant. / Articulo</th>
+                            <th style="text-align: right;">P.Unit</th>
+                            <th style="text-align: right;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${articulosVendidos.length === 0 ? `
+                            <tr>
+                                <td colSpan="3" class="text-center" style="padding: 10px 0; color: #555;">No se registraron ventas en este turno.</td>
+                            </tr>
+                        ` : articulosVendidos.map(art => `
+                            <tr>
+                                <td>${art.cantidad}x ${art.prenda}</td>
+                                <td style="text-align: right;">$${parseFloat(art.precio_unitario).toFixed(2)}</td>
+                                <td style="text-align: right;">$${parseFloat(art.subtotal).toFixed(2)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                
                 <div class="linea-divisoria"></div>
-                <div class="flex-justify"><span>(+) FONDO INICIAL:</span><span>$${fondoInicial.toFixed(2)}</span></div>
-                <div class="flex-justify"><span>(+) VENTAS TURNO:</span><span>$${totalVentas.toFixed(2)}</span></div>
+                
+                <div class="flex-justify">
+                    <span>(+) FONDO INICIAL:</span>
+                    <span>$${fondoInicial.toFixed(2)}</span>
+                </div>
+                <div class="flex-justify" style="margin-top: 3px;">
+                    <span>(+) VENTAS DEL TURNO:</span>
+                    <span class="fw-bold text-success">$${totalVentas.toFixed(2)}</span>
+                </div>
+                
                 <div class="linea-divisoria"></div>
-                <div class="flex-justify grand-total"><span>(=) TOTAL EN CAJA:</span><span>$${montoFinal > 0 ? montoFinal.toFixed(2) : fondoInicial.toFixed(2)}</span></div>
-                <div class="linea-divisoria" style="border-top: 1px double #000;"></div>
-                <div class="text-center" style="margin-top: 15px; font-size: 10px;">Arqueo guardado en AWS RDS.<br/><br/><b>Firmado por Gerencia.</b></div>
-                <script>window.onload = function() { window.print(); window.close(); };</script>
+                
+                <div class="flex-justify grand-total" style="border: 1px solid #000; padding: 4px;">
+                    <span>(=) EFECTIVO EN CAJA:</span>
+                    <span>$${montoFinal > 0 ? montoFinal.toFixed(2) : fondoInicial.toFixed(2)}</span>
+                </div>
+                
+                <div class="linea-divisoria" style="border-top: 1px dashed #000; margin-top: 15px;"></div>
+                
+                <div class="text-center" style="margin-top: 10px; font-size: 10px;">
+                    Arqueo correlacionado con base de datos AWS RDS.<br/><br/>
+                    <b>Firma Responsable: admin_sofi</b>
+                </div>
+                
+                <script>
+                    window.onload = function() {
+                        window.print();
+                        window.close();
+                    };
+                </script>
             </body>
             </html>
         `);
         ventanaImpresion.document.close();
-    };
+
+    } catch (error) {
+        console.error(error);
+        alert("❌ Error de comunicación al estructurar el desglose del ticket.");
+    }
+};
     const handleDeleteUser = async (id) => {
     try {
         const res = await fetch(`http://34.219.103.28:3000/api/productos/usuarios/${id}`, {

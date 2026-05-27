@@ -235,18 +235,30 @@ router.put('/:id', async (req, res) => {
 
 router.get('/ventas', verificarToken, async (req, res) => {
     try {
-        // Hacemos el INNER JOIN con usuarios para jalar el string del nombre del vendedor
-        const query = `
-            SELECT v.id, v.total, v.descuento_aplicado, v.fecha_venta, u.username as vendedor_name, u.rol
-            FROM ventas v
-            INNER JOIN usuarios u ON v.usuario_id = u.id
-            ORDER BY v.fecha_venta DESC;
+        // 1. Buscamos si existe una caja abierta actualmente
+        const queryCaja = `SELECT fecha_apertura FROM movimientos_caja WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1;`;
+        const resCaja = await pool.query(queryCaja);
+
+        // Si no hay ninguna caja abierta, limpiamos el historial visual mandando 0 filas
+        if (resCaja.rows.length === 0) {
+            return res.status(200).json([]);
+        }
+
+        const fechaApertura = resCaja.rows[0].fecha_apertura;
+
+        // 2. Traemos SOLO las ventas que se hicieron DESPUÉS de esa fecha de apertura
+        const queryVentas = `
+            SELECT id AS folio, usuario_id, total AS total_cobrado, fecha_venta AS fecha_hora 
+            FROM ventas 
+            WHERE fecha_venta >= $1
+            ORDER BY id DESC;
         `;
-        const result = await pool.query(query);
-        res.json(result.rows);
+        const resVentas = await pool.query(queryVentas, [fechaApertura]);
+        res.status(200).json(resVentas.rows);
+
     } catch (error) {
-        console.error('Error al obtener el historial de ventas:', error);
-        res.status(500).json({ error: 'No se pudo cargar el historial de ventas.' });
+        console.error("Error al obtener las ventas del turno:", error);
+        res.status(500).json({ error: "No se pudieron obtener las ventas." });
     }
 });
 router.get('/devoluciones', verificarToken, async (req, res) => {
@@ -292,7 +304,6 @@ router.post('/movimientos-caja/cerrar-caja', verificarToken, async (req, res) =>
     try {
         await pool.query('BEGIN');
 
-        // Paso 1: Encontrar la caja abierta actual de ese usuario
         const queryBuscarAbierta = `
             SELECT id, fecha_apertura, monto_inicial 
             FROM movimientos_caja 
@@ -303,7 +314,7 @@ router.post('/movimientos-caja/cerrar-caja', verificarToken, async (req, res) =>
 
         if (resCaja.rows.length === 0) {
             await pool.query('ROLLBACK');
-            return res.status(400).json({ error: "No se encontró ninguna caja abierta para este usuario." });
+            return res.status(400).json({ error: "No se encontró ninguna caja abierta." });
         }
 
         const cajaActiva = resCaja.rows[0];
@@ -311,7 +322,7 @@ router.post('/movimientos-caja/cerrar-caja', verificarToken, async (req, res) =>
         const fechaApertura = cajaActiva.fecha_apertura;
         const montoInicial = parseFloat(cajaActiva.monto_inicial);
 
-        // Paso 2: 🧮 Calcular la sumatoria de ventas acumuladas desde la apertura
+        // Sumamos absolutamente todas las ventas desde la apertura
         const querySumarVentas = `
             SELECT COALESCE(SUM(total), 0) AS total_ventas 
             FROM ventas 
@@ -320,10 +331,9 @@ router.post('/movimientos-caja/cerrar-caja', verificarToken, async (req, res) =>
         const resVentas = await pool.query(querySumarVentas, [idOperador, fechaApertura]);
         const totalVentasTurno = parseFloat(resVentas.rows[0].total_ventas);
 
-        // El monto final real en efectivo es el fondo inicial + lo vendido en el día
         const montoFinalCalculado = montoInicial + totalVentasTurno;
 
-        // Paso 3: Actualizar la tabla movimientos_caja con el cierre completo y estado 'cerrada'
+        // Actualizamos el estado a 'cerrada'
         const queryActualizarCaja = `
             UPDATE movimientos_caja 
             SET monto_final = $1, fecha_cierre = NOW(), estado = 'cerrada' 
@@ -331,18 +341,15 @@ router.post('/movimientos-caja/cerrar-caja', verificarToken, async (req, res) =>
         `;
         await pool.query(queryActualizarCaja, [montoFinalCalculado, cajaId]);
 
-        // Paso 4: Dejar evidencia transparente en la tabla de Auditoría
         const queryAuditoria = `
             INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) 
             VALUES ($1, $2, $3, NOW());
         `;
-        const detalleCierre = `CIERRE DE CAJA EXITOSO (Corte #C-${cajaId}). Fondo Inicial: $${montoInicial.toFixed(2)}. Ventas del turno: $${totalVentasTurno.toFixed(2)}. Monto Final Entregado: $${montoFinalCalculado.toFixed(2)}.`;
-        
+        const detalleCierre = `CIERRE DE CAJA (Corte #C-${cajaId}). Fondo Inicial: $${montoInicial.toFixed(2)}. Ventas: $${totalVentasTurno.toFixed(2)}. Total: $${montoFinalCalculado.toFixed(2)}.`;
         await pool.query(queryAuditoria, [idOperador, 'CIERRE_CAJA', detalleCierre]);
 
         await pool.query('COMMIT');
         
-        // Retornamos el formato exacto que lee el Front (monto_final y ventas_del_dia)
         res.status(200).json({ 
             ok: true, 
             message: "Caja cerrada correctamente", 
@@ -353,8 +360,8 @@ router.post('/movimientos-caja/cerrar-caja', verificarToken, async (req, res) =>
 
     } catch (error) {
         await pool.query('ROLLBACK');
-        console.error("Error crítico procesando el arqueo de caja:", error);
-        res.status(500).json({ error: "No se pudo procesar el cierre de caja." });
+        console.error("Error en el arqueo de caja:", error);
+        res.status(500).json({ error: "No se pudo procesar el cierre." });
     }
 });
 // =================================================================
@@ -402,7 +409,44 @@ router.post('/movimientos-caja/abrir-caja', verificarToken, async (req, res) => 
         res.status(500).json({ error: "No se pudo abrir la caja en el servidor." });
     }
 });
+// =================================================================
+// 📄 NUEVO: Endpoint para obtener el desglose de prendas de un corte (GET)
+// =================================================================
+router.get('/movimientos-caja/detalles-ticket/:id', verificarToken, async (req, res) => {
+    const { id } = req.params;
 
+    try {
+        // 1. Obtener los datos de apertura y cierre de esa caja
+        const queryCaja = `SELECT fecha_apertura, fecha_cierre FROM movimientos_caja WHERE id = $1;`;
+        const resCaja = await pool.query(queryCaja, [id]);
+
+        if (resCaja.rows.length === 0) {
+            return res.status(404).json({ error: "Corte de caja no encontrado." });
+        }
+
+        const { fecha_apertura, fecha_cierre } = resCaja.rows[0];
+        
+        // Si la caja sigue abierta, usamos la fecha y hora actual (NOW()) como límite de búsqueda
+        const limiteCierre = fecha_cierre ? fecha_cierre : new Date();
+
+        // 2. Traer el desglose detallado de todos los artículos vendidos en ese rango de tiempo
+        const queryArticulos = `
+            SELECT p.nombre AS prenda, dv.cantidad, dv.precio_unitario, (dv.cantidad * dv.precio_unitario) AS subtotal
+            FROM detalle_ventas dv
+            JOIN ventas v ON dv.venta_id = v.id
+            JOIN productos p ON dv.producto_id = p.id
+            WHERE v.fecha_venta >= $1 AND v.fecha_venta <= $2
+            ORDER BY v.id ASC;
+        `;
+        
+        const resArticulos = await pool.query(queryArticulos, [fecha_apertura, limiteCierre]);
+        res.status(200).json(resArticulos.rows);
+
+    } catch (error) {
+        console.error("Error al obtener desglose del ticket de corte:", error);
+        res.status(500).json({ error: "No se pudo procesar el desglose del ticket." });
+    }
+});
 router.post('/asistencia', async (req, res) => {
     const { probador, detalle } = req.body;
     try {
