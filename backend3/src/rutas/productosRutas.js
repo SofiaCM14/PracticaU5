@@ -313,7 +313,7 @@ router.post('/registrar-venta', verificarToken, async (req, res) => {
     const { total, descuento_aplicado, usuario_id, carrito, descuento_id } = req.body; 
 
     // Blindaje por si usuario_id viene indefinido o nulo, le asignamos el ID 1 (admin_sofi)
-    const idOperador = usuario_id ? parseInt(usuario_id) : 1;
+    const idOperador = usuario_id ? parseInt(req.usuario.id) : 1;
     // Si no mandan el descuento_id en la petición, por defecto se amarra al ID 1 (Sin Descuento)
     const idDescuento = descuento_id ? parseInt(descuento_id) : 1;
 
@@ -345,10 +345,6 @@ router.post('/registrar-venta', verificarToken, async (req, res) => {
                 [item.cantidad, item.producto_id]
             );
         }
-
-        // =================================================================
-        // 🚨 4. PASO 3: REGISTRO AUTOMÁTICO EN LA BITÁCORA DE AUDITORÍA
-        // =================================================================
         const queryAuditoria = `
             INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) 
             VALUES ($1, $2, $3, NOW());
