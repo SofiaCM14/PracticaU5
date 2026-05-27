@@ -18,6 +18,7 @@ const AdminDashboard = () => {
     const [idProductoVenta, setIdProductoVenta] = useState('');
     const [cantidadVenta, setCantidadVenta] = useState('');
     const [descuentoSeleccionado, setDescuentoSeleccionado] = useState('0'); // Guarda el porcentaje como String (0, 10, 20, etc.)
+    const [movimientosCajaData, setMovimientosCajaData] = useState([]); // ──> Guardará las aperturas y cierres
 
     // Formulario de Productos (Inserción rápida y extendida)
     const [nombre, setNombre] = useState('');
@@ -106,6 +107,17 @@ const AdminDashboard = () => {
         if (resDevoluciones.ok) {
             const datosDevoluciones = await resDevoluciones.json();
             setDevolucionesData(datosDevoluciones); // Guarda las devoluciones en el estado
+        }
+        const resCaja = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja', {
+            method: 'GET',
+            headers: { 
+                'Content-Type': 'application/json', 
+                'username': usuarioActivo,
+                ...authHeaders 
+            }
+        });
+        if (resCaja.ok) {
+            setMovimientosCajaData(await resCaja.json());
         }
 
         } catch (error) {
@@ -491,6 +503,19 @@ const AdminDashboard = () => {
                     onClick={() => { setVistaActiva('ventas'); cargarDatosAdmin(); }}
                 >
                     🛍️ Ventas
+                </button>
+                <button 
+                    style={{ 
+                        ...styles.menuBtn, 
+                        width: 'auto', 
+                        padding: '6px 16px', 
+                        margin: 0, 
+                        backgroundColor: vistaActiva === 'caja' ? '#ad1457' : '#fff', 
+                        color: vistaActiva === 'caja' ? '#fff' : '#ad1457' 
+                    }} 
+                    onClick={() => { setVistaActiva('caja'); cargarDatosAdmin(); }}
+                >
+                    💵 Control de Caja
                 </button>
             </nav>
 
@@ -1088,6 +1113,51 @@ const AdminDashboard = () => {
 
                         </Modal.Body>
                     </Modal>
+                    {/* ==================== MÓDULO DE MOVIMIENTOS DE CAJA COMPLETO ==================== */}
+                    {vistaActiva === 'caja' && (
+                        <div className="animate__animated animate__fadeIn">
+                            <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>💵 Historial de Aperturas y Cierres de Caja</h5>
+                            
+                            <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
+                                <thead className="table-light">
+                                    <tr>
+                                        <th>ID Corte</th>
+                                        <th>Operador (ID)</th>
+                                        <th>F. Apertura</th>
+                                        <th>Monto Inicial</th>
+                                        <th>F. Cierre</th>
+                                        <th>Monto Final</th>
+                                        <th>Estado de Caja</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {movimientosCajaData.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="7" className="text-muted py-3">No hay registros de caja creados todavía. (0 rows)</td>
+                                        </tr>
+                                    ) : (
+                                        movimientosCajaData.map((caja, i) => (
+                                            <tr key={i} className="border-bottom">
+                                                <td className="fw-bold text-secondary">#C-{caja.id}</td>
+                                                <td><Badge bg="dark">ID: {caja.usuario_id}</Badge></td>
+                                                <td className="text-muted">{caja.fecha_apertura ? new Date(caja.fecha_apertura).toLocaleString('es-MX') : '---'}</td>
+                                                <td className="fw-bold text-primary">${parseFloat(caja.monto_inicial).toFixed(2)}</td>
+                                                <td className="text-muted">{caja.fecha_cierre ? new Date(caja.fecha_cierre).toLocaleString('es-MX') : '---'}</td>
+                                                <td className="fw-bold text-success">
+                                                    {caja.monto_final ? `$${parseFloat(caja.monto_final).toFixed(2)}` : '---'}
+                                                </td>
+                                                <td>
+                                                    <Badge bg={caja.estado === 'abierta' ? 'success' : 'secondary'}>
+                                                        {caja.estado.toUpperCase()}
+                                                    </Badge>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </Table>
+                        </div>
+                    )}
                        
                         {vistaActiva === 'devoluciones' && (
                             <div className="animate__animated animate__fadeIn">
