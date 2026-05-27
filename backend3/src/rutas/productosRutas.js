@@ -387,5 +387,24 @@ router.get('/ventas/detalles/:id', verificarToken, async (req, res) => {
         res.status(500).json({ error: 'No se pudo obtener el desglose del ticket.' });
     }
 });
+// 🟢 NUEVO: Endpoint para jalar los movimientos de caja hacia el Frontend
+router.get('/movimientos-caja', verificarToken, async (req, res) => {
+    try {
+        // Hacemos la consulta ordenando por el ID más reciente primero
+        const queryCaja = `
+            SELECT id, usuario_id, monto_inicial, monto_final, fecha_apertura, fecha_cierre, estado 
+            FROM movimientos_caja 
+            ORDER BY id DESC;
+        `;
+        
+        const resultado = await pool.query(queryCaja);
+        
+        // Respondemos al frontend mandando las filas de la base de datos en JSON
+        res.status(200).json(resultado.rows);
 
+    } catch (error) {
+        console.error("Error crítico leyendo movimientos_caja de RDS:", error);
+        res.status(500).json({ error: "No se pudieron obtener los registros de caja." });
+    }
+});
 export default router;
