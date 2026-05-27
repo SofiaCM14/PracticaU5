@@ -17,7 +17,6 @@ const AdminDashboard = () => {
     // ====== ESTADOS PARA EL MÓDULO DE VENTAS ======
     const [idProductoVenta, setIdProductoVenta] = useState('');
     const [cantidadVenta, setCantidadVenta] = useState('');
-    const [carrito, setCarrito] = useState([]); // <── Aquí guardamos las prendas antes de cobrar
 
     // Formulario de Productos (Inserción rápida y extendida)
     const [nombre, setNombre] = useState('');
@@ -157,12 +156,40 @@ const AdminDashboard = () => {
         setCantidadVenta('');
     };
 
-    // 2. Enviar el carrito completo al Backend de AWS
-    const handleProcesarVenta = async () => {
-        if (carrito.length === 0) return;
+    const handleCompraDirecta = async (e) => {
+        e.preventDefault();
 
-        // Calculamos el total sumando los subtotales del carrito
-        const totalVenta = carrito.reduce((acc, item) => acc + (item.cantidad * item.precio_unitario), 0);
+        // 1. Validamos que el producto exista en tu lista de prendas local
+        const productoExiste = prendasData.find(p => p.id === parseInt(idProductoVenta));
+        
+        if (!productoExiste) {
+            alert("⚠️ El ID del producto no existe en el catálogo.");
+            return;
+        }
+        
+        // 2. Validamos si hay suficiente stock en AWS antes de mandar la petición
+        if (parseInt(cantidadVenta) > productoExiste.stock) {
+            alert(`⚠️ Stock insuficiente. Solo quedan ${productoExiste.stock} pz.`);
+            return;
+        }
+
+        // 3. Calculamos el total con su precio real actual de catálogo
+        const precioReal = parseFloat(productoExiste.precio);
+        const totalCobrado = parseInt(cantidadVenta) * precioReal;
+
+        // 4. Estructuramos el cuerpo simulando el formato de "carrito" que espera tu backend
+        const datosVenta = {
+            total: totalCobrado,
+            descuento_aplicado: 0.00,
+            usuario_id: usuarioActivo.id, // ID de admin_sofi
+            carrito: [
+                {
+                    producto_id: productoExiste.id,
+                    cantidad: parseInt(cantidadVenta),
+                    precio_unitario: precioReal
+                }
+            ]
+        };
 
         try {
             const res = await fetch('http://34.219.103.28:3000/api/productos/registrar-venta', {
@@ -171,26 +198,26 @@ const AdminDashboard = () => {
                     'Content-Type': 'application/json',
                     ...getAuthHeaders()
                 },
-                body: JSON.stringify({
-                    total: totalVenta,
-                    descuento_aplicado: 0.00,
-                    usuario_id: 1, // Aquí puedes usar el ID de tu sesión activa 'admin_sofi'
-                    carrito: carrito // Envíal el array completo
-                })
+                body: JSON.stringify(datosVenta)
             });
 
             if (res.ok) {
                 const data = await res.json();
-                setCarrito([]); // Limpiamos la caja registradora
-                cargarDatosAdmin(); // ──> 🟢 Recarga la tabla para ver el nuevo folio instantáneamente
                 
-                // Opcional: Jalamos los detalles para mostrar de inmediato el ticket bonito en pantalla
+                // Limpiamos los inputs de inmediato
+                setIdProductoVenta('');
+                setCantidadVenta('');
+                
+                // Recargamos el historial para ver el nuevo folio
+                cargarDatosAdmin(); 
+                
+                // 🟢 Disparamos automáticamente tu modal estilo ticket bonito
                 handleVerDetallesTicket(data.venta_id);
             } else {
-                alert("Error al procesar la venta.");
+                alert("Error al registrar la venta en el servidor.");
             }
         } catch (error) {
-            console.error("Error en el punto de venta:", error);
+            console.error("Error en la transacción exprés:", error);
         }
     };
 
@@ -831,91 +858,49 @@ const AdminDashboard = () => {
                         )}
                         {/* ====== AGREGA ESTA VISTA EN AdminDashboard.jsx ====== */}
                         {/* ==================== MÓDULO DE VENTAS COMPLETO ==================== */}
+                        {/* ==================== MÓDULO DE VENTAS COMPLETO (COMPRA DIRECTA) ==================== */}
                         {vistaActiva === 'ventas' && (
                             <div className="animate__animated animate__fadeIn">
                                 
-                                {/* 🛒 SECCIÓN 1: CAJA REGISTRADORA / PUNTO DE VENTA */}
-                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>🛒 Nueva Venta (Punto de Venta)</h5>
-                                <Row className="g-3 mb-4">
-                                    {/* Formulario de entrada */}
+                                {/* 🛒 FORMULARIO DE COMPRA EXPRÉS */}
+                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>🛒 Registrar Nueva Venta Directa</h5>
+                                
+                                <Form onSubmit={handleCompraDirecta} className="row g-2 mb-4 p-2 bg-light rounded align-items-end m-0 border">
+                                    {/* Input ID Producto */}
                                     <Col md={4}>
-                                        <Form onSubmit={handleAgregarAlCarrito} className="p-3 bg-light rounded border m-0 row g-2">
-                                            <Col xs={12}>
-                                                <Form.Control 
-                                                    type="number" 
-                                                    placeholder="ID del Producto (Ej: 3)" 
-                                                    value={idProductoVenta} 
-                                                    onChange={e => setIdProductoVenta(e.target.value)} 
-                                                    size="sm" 
-                                                    required 
-                                                />
-                                            </Col>
-                                            <Col xs={12}>
-                                                <Form.Control 
-                                                    type="number" 
-                                                    placeholder="Cantidad a vender" 
-                                                    value={cantidadVenta} 
-                                                    onChange={e => setCantidadVenta(e.target.value)} 
-                                                    size="sm" 
-                                                    required 
-                                                />
-                                            </Col>
-                                            <Col xs={12}>
-                                                <Button type="submit" variant="success" className="btn-sm w-100">
-                                                    ➕ Añadir al Carrito
-                                                </Button>
-                                            </Col>
-                                        </Form>
+                                        <Form.Control 
+                                            type="number" 
+                                            placeholder="ID del Producto (Ej: 3)" 
+                                            value={idProductoVenta} 
+                                            onChange={e => setIdProductoVenta(e.target.value)} 
+                                            size="sm" 
+                                            required 
+                                        />
                                     </Col>
-
-                                    {/* Monitor del Carrito Actual */}
-                                    <Col md={8}>
-                                        <div className="p-3 bg-white rounded border h-100 d-flex flex-column justify-content-between">
-                                            <div>
-                                                <h6 className="fw-bold small text-muted border-bottom pb-1 mb-2">Prendas en el Carrito:</h6>
-                                                {carrito.length === 0 ? (
-                                                    <p className="text-muted small text-center my-3">El carrito está vacío.</p>
-                                                ) : (
-                                                    <Table size="sm" className="small text-center align-middle mb-0">
-                                                        <thead>
-                                                            <tr>
-                                                                <th className="text-start">ID - Prenda</th>
-                                                                <th>Cant.</th>
-                                                                <th>Precio</th>
-                                                                <th className="text-end">Subtotal</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {carrito.map((item, idx) => (
-                                                                <tr key={idx}>
-                                                                    <td className="text-start">#{item.producto_id} - {item.nombre_prenda}</td>
-                                                                    <td>{item.cantidad}</td>
-                                                                    <td>${item.precio_unitario.toFixed(2)}</td>
-                                                                    <td className="text-end fw-bold">${(item.cantidad * item.precio_unitario).toFixed(2)}</td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </Table>
-                                                )}
-                                            </div>
-                                            {/* Botón de acción para registrar en AWS */}
-                                            {carrito.length > 0 && (
-                                                <div className="d-flex justify-content-between align-items-center border-top pt-2 mt-2">
-                                                    <span className="fw-bold text-dark small">
-                                                        TOTAL: ${carrito.reduce((acc, item) => acc + (item.cantidad * item.precio_unitario), 0).toFixed(2)}
-                                                    </span>
-                                                    <Button variant="danger" size="sm" className="px-4" onClick={handleProcesarVenta}>
-                                                        💰 Concluir y Cobrar Venta
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </div>
+                                    
+                                    {/* Input Cantidad */}
+                                    <Col md={4}>
+                                        <Form.Control 
+                                            type="number" 
+                                            placeholder="Cantidad a vender" 
+                                            value={cantidadVenta} 
+                                            onChange={e => setCantidadVenta(e.target.value)} 
+                                            size="sm" 
+                                            required 
+                                        />
                                     </Col>
-                                </Row>
+                                    
+                                    {/* Botón Realizar Compra */}
+                                    <Col md={4}>
+                                        <Button type="submit" variant="danger" className="w-100 btn-sm" style={{ height: '31px', backgroundColor: '#ad1457', borderColor: '#ad1457' }}>
+                                            💰 Realizar Compra Directa
+                                        </Button>
+                                    </Col>
+                                </Form>
 
                                 <hr className="my-4 text-muted" />
 
-                                {/* 📊 SECCIÓN 2: HISTORIAL DE FOLIOS COBRADOS */}
+                                {/* 📊 HISTORIAL DE VENTAS */}
                                 <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>💰 Historial de Ventas Ejecutadas</h5>
                                 <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
                                     <thead className="table-light">
