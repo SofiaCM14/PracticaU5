@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Table, Badge, Form, Alert, Button, Card, Modal, InputGroup } from 'react-bootstrap';
+import Swal from 'sweetalert2';
 
 const AdminDashboard = () => {
     const [recentActivity, setRecentActivity] = useState([]);
@@ -427,47 +428,62 @@ const AdminDashboard = () => {
             console.error("Error al actualizar usuario:", error);
         }
     };
-    const handleCerrarCaja = async () => {
-        // 🔔 Mensaje de confirmación interactivo
-        const confirmar = window.confirm("¿Estás seguro de cerrar la caja?");
-        
-        // Si le picas a "Cancelar" (No), simplemente se cierra la alerta y no hace nada
-        if (!confirmar) return;
+        const handleCerrarCaja = async () => {
+        // 🔔 Confirmación estilizada con SweetAlert2
+        Swal.fire({
+            title: '¿Estás segura?',
+            text: "¿Deseas realizar el corte y cerrar la caja por hoy?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d32f2f',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Sí, cerrar caja 🔒',
+            cancelButtonText: 'Cancelar'
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                try {
+                    const authHeaders = getAuthHeaders();
+                    const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/cerrar-caja', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...authHeaders },
+                        body: JSON.stringify({ usuario_id: 1 }) 
+                    });
 
-        try {
-            const authHeaders = getAuthHeaders();
-            const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/cerrar-caja', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', ...authHeaders },
-                body: JSON.stringify({ usuario_id: 1 }) // ID de admin_sofi
-            });
+                    const data = await response.json();
 
-            const data = await response.json();
-
-            if (response.ok) {
-                alert(`🔒 ¡Caja Cerrada Exitosamente!\n\n💰 Ventas acumuladas en el turno: $${data.ventas_del_dia.toFixed(2)}\n💵 Total entregado en efectivo: $${data.monto_final.toFixed(2)}`);
-                
-                // 🔄 REFRESCAMOS TODO EN CALIENTE
-                cargarDatosAdmin(); 
-                
-                // Si tienes una función específica que cargue el historial de ventas en esa pestaña, la ejecutas aquí:
-                if (typeof cargarVentas === 'function') {
-                    cargarVentas(); 
+                    if (response.ok) {
+                        // 🎉 Cuadro de Éxito Bonito
+                        Swal.fire({
+                            title: '¡Caja Cerrada!',
+                            html: `
+                                <div style="text-align: left; font-size: 14px; margin-top: 10px;">
+                                    💰 <b>Ventas del turno:</b> $${data.ventas_del_dia.toFixed(2)}<br/>
+                                    💵 <b>Efectivo total entregado:</b> $${data.monto_final.toFixed(2)}
+                                </div>
+                            `,
+                            icon: 'success',
+                            confirmButtonColor: '#ad1457'
+                        });
+                        
+                        cargarDatosAdmin(); 
+                        if (typeof cargarVentas === 'function') cargarVentas(); 
+                    } else {
+                        Swal.fire('⚠️ Error', data.error, 'error');
+                    }
+                } catch (error) {
+                    console.error(error);
+                    Swal.fire('❌ Error', 'Error de comunicación con el servidor.', 'error');
                 }
-            } else {
-                alert(`⚠️ Error: ${data.error}`);
             }
-        } catch (error) {
-            console.error("Error al conectar el cierre:", error);
-            alert("❌ Error de comunicación con el servidor al procesar el arqueo.");
-        }
+        });
     };
-    const handleAbrirCajaDefinitivo = async (e) => {
+   
+        const handleAbrirCajaDefinitivo = async (e) => {
         e.preventDefault();
         const fondoNum = parseFloat(montoInicialInput);
 
         if (isNaN(fondoNum) || fondoNum < 0) {
-            alert("Por favor, ingresa una cantidad válida igual o mayor a $0.00");
+            Swal.fire('⚠️ Atención', 'Por favor, ingresa una cantidad válida igual o mayor a $0.00', 'info');
             return;
         }
 
@@ -476,32 +492,36 @@ const AdminDashboard = () => {
             const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/abrir-caja', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...authHeaders },
-                body: JSON.stringify({
-                    usuario_id: 1, // ID de admin_sofi
-                    monto_inicial: fondoNum
-                })
+                body: JSON.stringify({ usuario_id: 1, monto_inicial: fondoNum })
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                alert(`🔓 ¡Turno Abierto con Éxito!\nFondo Inicial: $${fondoNum.toFixed(2)}`);
+                // 🎉 Cuadro de Éxito Bonito para la Apertura
+                Swal.fire({
+                    title: '¡Turno Abierto con Éxito!',
+                    text: `El fondo inicial de $${fondoNum.toFixed(2)} ha sido registrado.`,
+                    icon: 'success',
+                    confirmButtonColor: '#2e7d32'
+                });
+
                 setShowModalAbrir(false);
                 setMontoInicialInput('');
-                cargarDatosAdmin(); // Refresca las tarjetas en tiempo real
+                cargarDatosAdmin(); 
             } else {
-                alert(`⚠️ Error: ${data.error}`);
+                Swal.fire('⚠️ Error', data.error, 'error');
             }
         } catch (error) {
-            console.error("Error al conectar la apertura:", error);
-            alert("❌ Error de comunicación con el servidor.");
+            console.error(error);
+            Swal.fire('❌ Error', 'Error de comunicación con el servidor.', 'error');
         }
     };
 
    const handleImprimirTicketCorte = async (datosCaja) => {
     try {
         const authHeaders = getAuthHeaders();
-        // 📡 Consultamos al backend el desglose de artículos de este corte en específico
+        // 📡 Consultamos al backend el desglose de artículos
         const response = await fetch(`http://34.219.103.28:3000/api/productos/movimientos-caja/detalles-ticket/${datosCaja.id}`, {
             method: 'GET',
             headers: authHeaders
@@ -515,14 +535,14 @@ const AdminDashboard = () => {
         const montoFinal = parseFloat(datosCaja.monto_final) || 0;
         const totalVentas = montoFinal > 0 ? (montoFinal - fondoInicial) : 0;
 
-        // 📄 Abrimos la ventana del ticket térmico
-        const ventanaImpresion = window.open('', '_blank', 'width=400,height=700');
+        // 📄 Abrimos la ventana del ticket (Sin el auto-print inmediato)
+        const ventanaImpresion = window.open('', '_blank', 'width=420,height=700,scrollbars=yes');
         ventanaImpresion.document.write(`
             <html>
             <head>
-                <title>Ticket de Corte de Caja - SmartBoutique</title>
+                <title>Ticket de Corte de Caja - #C-${datosCaja.id}</title>
                 <style>
-                    body { font-family: 'Courier New', Courier, monospace; width: 290px; margin: 0 auto; padding: 10px; font-size: 12px; color: #000; }
+                    body { font-family: 'Courier New', Courier, monospace; width: 300px; margin: 0 auto; padding: 20px 10px; font-size: 12px; color: #000; background-color: #fff; }
                     .text-center { text-align: center; }
                     .fw-bold { font-weight: bold; }
                     .linea-divisoria { border-top: 1px dashed #000; margin: 8px 0; }
@@ -531,9 +551,40 @@ const AdminDashboard = () => {
                     .tabla-prendas { width: 100%; margin: 6px 0; font-size: 11px; border-collapse: collapse; }
                     .tabla-prendas th { text-align: left; border-bottom: 1px dashed #000; padding-bottom: 3px; }
                     .tabla-prendas td { padding: 3px 0; }
+                    
+                    /* 🖨️ ESTILOS DEL BOTÓN DE ACCIÓN INTERACTIVO */
+                    .no-print-zone { 
+                        display: flex; 
+                        justify-content: center; 
+                        margin-bottom: 25px; 
+                    }
+                    .btn-print { 
+                        background-color: #2e7d32; 
+                        color: white; 
+                        border: none; 
+                        padding: 8px 16px; 
+                        font-size: 12px; 
+                        font-weight: bold; 
+                        border-radius: 6px; 
+                        cursor: pointer; 
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                        font-family: Arial, sans-serif;
+                    }
+                    .btn-print:hover { background-color: #1b5e20; }
+
+                    /* Oculta el botón por completo cuando se mande a la impresora física o a PDF */
+                    @media print {
+                        .no-print-zone { display: none !important; }
+                        body { margin: 0; padding: 10px; width: 100%; }
+                    }
                 </style>
             </head>
             <body>
+                
+                <div class="no-print-zone">
+                    <button class="btn-print" onclick="window.print()">🖨️ Imprimir o Guardar Ticket</button>
+                </div>
+
                 <div class="text-center">
                     <h3 style="margin:0; text-transform: uppercase;">✨ SmartBoutique ✨</h3>
                     <p style="margin:2px 0;">SISTEMA DE AUDITORÍA CLOUD</p>
@@ -601,13 +652,6 @@ const AdminDashboard = () => {
                     Arqueo correlacionado con base de datos AWS RDS.<br/><br/>
                     <b>Firma Responsable: admin_sofi</b>
                 </div>
-                
-                <script>
-                    window.onload = function() {
-                        window.print();
-                        window.close();
-                    };
-                </script>
             </body>
             </html>
         `);

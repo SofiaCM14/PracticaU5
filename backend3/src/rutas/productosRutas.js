@@ -228,11 +228,7 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-// ========================================================
-// 4, 5, 6, 7 y 8. RESTO DE TUS ENDPOINTS (VENTAS, CAJA, ETC)
-// ========================================================
-// ====== AGREGA ESTA RUTA EN TU backend3/src/rutas/productosRutas.js ======
-
+// 🛍️ ENDPOINT CORREGIDO: OBTENER VENTAS DEL TURNO ACTIVO (GET)
 router.get('/ventas', verificarToken, async (req, res) => {
     try {
         // 1. Buscamos si existe una caja abierta actualmente
@@ -246,9 +242,9 @@ router.get('/ventas', verificarToken, async (req, res) => {
 
         const fechaApertura = resCaja.rows[0].fecha_apertura;
 
-        // 2. Traemos SOLO las ventas que se hicieron DESPUÉS de esa fecha de apertura
+        // 2. Traemos las columnas con sus nombres NATIVOS e idénticos a como los lee tu Front
         const queryVentas = `
-            SELECT id AS folio, usuario_id, total AS total_cobrado, fecha_venta AS fecha_hora 
+            SELECT id, usuario_id, total, fecha_venta, descuento
             FROM ventas 
             WHERE fecha_venta >= $1
             ORDER BY id DESC;
