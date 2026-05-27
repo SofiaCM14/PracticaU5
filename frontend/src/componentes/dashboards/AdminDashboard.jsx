@@ -1179,10 +1179,10 @@ const AdminDashboard = () => {
                                         ventasData.map((venta, i) => (
                                             <tr key={i} className="border-bottom">
                                                 {/* 🔢 Folio del Turno */}
-                                                <td className="fw-bold text-secondary">#V-{venta.id}</td>
+                                                <td className="fw-bold text-secondary">V-{venta.id}</td>
                                                 
                                                 {/* 👤 Operador */}
-                                                <td>{venta.username || `Empleado (ID: ${venta.usuario_id})`}</td>
+                                                <td>{venta.username || `Empleado: ${venta.usuario_id}`}</td>
                                                 
                                                 <td>
                                                     <Badge bg={venta.rol === 'admin' ? 'danger' : 'secondary'}>

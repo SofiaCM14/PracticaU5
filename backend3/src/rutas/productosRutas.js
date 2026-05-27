@@ -256,10 +256,18 @@ router.get('/ventas', verificarToken, async (req, res) => {
         // 3. Traemos SOLO las ventas que se hicieron desde que se abrió esta caja
         // Usamos las columnas nativas para que tu Frontend las mapée sin problemas
         const queryVentas = `
-            SELECT id, usuario_id, total, fecha_venta, descuento_aplicado
-            FROM ventas 
-            WHERE fecha_venta >= $1
-            ORDER BY id DESC;
+            SELECT 
+                v.id, 
+                v.usuario_id, 
+                v.total, 
+                v.fecha_venta, 
+                v.descuento_aplicado,
+                u.username,
+                u.rol
+            FROM ventas v
+            INNER JOIN usuarios u ON v.usuario_id = u.id
+            WHERE v.fecha_venta >= $1
+            ORDER BY v.id DESC;
         `;
         const resVentas = await pool.query(queryVentas, [fechaApertura]);
         
