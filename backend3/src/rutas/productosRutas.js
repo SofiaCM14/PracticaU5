@@ -118,15 +118,28 @@ router.post('/usuarios', verificarToken, esGerente, async (req, res) => {
 });
 
 // 🔒 ACTUALIZAR USUARIO EXISTENTE (Solo Gerente)
-router.put('/usuarios/:id', verificarToken, esGerente, async (req, res) => {
+router.put('/usuarios/:id', verificarToken, async (req, res) => {
     const { id } = req.params;
-    const { username, rol } = req.body;
+    const { username, rol, password } = req.body;
+
     try {
-        await pool.query('UPDATE usuarios SET username = $1, rol = $2 WHERE id = $3;', [username, rol, id]);
-        res.json({ message: 'Usuario actualizado con éxito' });
+        if (password) {
+            // Si el admin cambió la contraseña
+            await pool.query(
+                'UPDATE usuarios SET username = $1, rol = $2, password = $3 WHERE id = $4',
+                [username, rol, password, id]
+            );
+        } else {
+            // Si el admin no tocó la contraseña, se queda intacta la actual
+            await pool.query(
+                'UPDATE usuarios SET username = $1, rol = $2 WHERE id = $3',
+                [username, rol, id]
+            );
+        }
+        res.json({ message: 'Usuario modificado con éxito.' });
     } catch (error) {
-        console.error('Error al actualizar usuario:', error);
-        res.status(500).json({ error: 'Error al actualizar usuario' });
+        console.error(error);
+        res.status(500).json({ error: 'Error al actualizar.' });
     }
 });
 
@@ -236,7 +249,23 @@ router.get('/ventas', verificarToken, async (req, res) => {
         res.status(500).json({ error: 'No se pudo cargar el historial de ventas.' });
     }
 });
-
+router.get('/devoluciones', verificarToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT d.id, d.venta_id, d.producto_detalle, d.cantidad, 
+                   d.motivo_devolucion, d.monto_reembolsado, d.tipo_reembolso, 
+                   d.fecha_devolucion, u.username as operador_name
+            FROM devoluciones d
+            INNER JOIN usuarios u ON d.usuario_id = u.id
+            ORDER BY d.fecha_devolucion DESC;
+        `;
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error al obtener devoluciones:', error);
+        res.status(500).json({ error: 'No se pudo cargar el historial de devoluciones.' });
+    }
+});
 router.post('/caja', async (req, res) => {
     const { tipo, monto, usuario, rol } = req.body; 
     const client = await pool.connect();

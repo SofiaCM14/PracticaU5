@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Table, Badge, Form, Alert, Button, Card, Modal } from 'react-bootstrap';
+import { Row, Col, Table, Badge, Form, Alert, Button, Card, Modal, InputGroup } from 'react-bootstrap';
 
 const AdminDashboard = () => {
     const [recentActivity, setRecentActivity] = useState([]);
     const [listaUsuarios, setListaUsuarios] = useState([]);
     const [productos, setProductos] = useState([]);
     const [alertMessage, setAlertMessage] = useState(null);
-    
+    const [showPass, setShowPass] = useState(false);
+    const [showNewPass, setShowNewPass] = useState(false);
+    const [nuevoPassword, setNuevoPassword] = useState('');
     // Control de lienzo dinámico central
     const [vistaActiva, setVistaActiva] = useState('bienvenida'); 
 
@@ -38,6 +40,11 @@ const AdminDashboard = () => {
     const [editProdImagen, setEditProdImagen] = useState('');
     const [editProdTags, setEditProdTags] = useState('');
     const [ventasData, setVentasData] = useState([]);
+    const [devolucionesData, setDevolucionesData] = useState([]);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [userIdAEliminar, setUserIdAEliminar] = useState(null);
+    const [usernameAEliminar, setUsernameAEliminar] = useState('');
+    const [editPassword, setEditPassword] = useState('');
 
     const usuarioActivo = localStorage.getItem('username') || 'admin_sofi';
     const rolActivo = localStorage.getItem('userRole') || 'admin';
@@ -81,6 +88,19 @@ const AdminDashboard = () => {
             const datosVentas = await resVentas.json();
             setVentasData(datosVentas); // Guarda las ventas en el estado
         }
+        const resDevoluciones = await fetch('http://34.219.103.28:3000/api/productos/devoluciones', {
+            method: 'GET',
+            headers: { 
+                'Content-Type': 'application/json', 
+                'username': usuarioActivo, // Bypass para admin_sofi
+                ...authHeaders 
+            }
+        });
+        if (resDevoluciones.ok) {
+            const datosDevoluciones = await resDevoluciones.json();
+            setDevolucionesData(datosDevoluciones); // Guarda las devoluciones en el estado
+        }
+
         } catch (error) {
             console.error("Error de conectividad AWS RDS:", error);
         }
@@ -231,35 +251,52 @@ const AdminDashboard = () => {
         } catch (error) { console.error(error); }
     };
 
-    const handleSaveEditUser = async (id) => {
+   const handleSaveEditUser = async (id) => {
         try {
-            const response = await fetch(`http://34.219.103.28:3000/api/productos/usuarios/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                body: JSON.stringify({ username: editUsername, rol: editRol })
-            });
-            if (response.ok) {
-                setAlertMessage('¡Usuario actualizado correctamente! 📝');
-                setEditandoId(null); 
-                cargarDatosAdmin(); 
-            }
-        } catch (error) { console.error(error); }
-    };
+            // Armamos el cuerpo básico
+            const datosAEnviar = {
+                username: editUsername,
+                rol: editRol
+            };
 
-    const handleDeleteUser = async (id, username) => {
-        if (window.confirm(`¿Estás segura de eliminar al usuario "${username}"?`)) {
-            try {
-                const response = await fetch(`http://34.219.103.28:3000/api/productos/usuarios/${id}`, {
-                    method: 'DELETE',
-                    headers: getAuthHeaders()
-                });
-                if (response.ok) {
-                    setAlertMessage(`El usuario "${username}" ha sido removido.`);
-                    cargarDatosAdmin(); 
-                }
-            } catch (error) { console.error(error); }
+            // 🟢 Si la administradora escribió una contraseña nueva, la anexamos al JSON
+            if (editPassword && editPassword.trim() !== '') {
+                datosAEnviar.password = editPassword;
+            }
+
+            const res = await fetch(`http://34.219.103.28:3000/api/productos/usuarios/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'username': usuarioActivo,
+                    ...getAuthHeaders()
+                },
+                body: JSON.stringify(datosAEnviar)
+            });
+
+            if (res.ok) {
+                setEditandoId(null);
+                setEditPassword('');
+                cargarDatosAdmin(); // Recarga la tabla de inmediato
+            }
+        } catch (error) {
+            console.error("Error al actualizar usuario:", error);
         }
     };
+    const handleDeleteUser = async (id) => {
+    try {
+        const res = await fetch(`http://34.219.103.28:3000/api/productos/usuarios/${id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            // Actualizas tu lista local para quitarlo de pantalla
+            setListaUsuarios(listaUsuarios.filter(u => u.id !== id));
+        }
+    } catch (error) {
+        console.error("Error al borrar usuario:", error);
+    }
+};
 
     const styles = {
         mainContainer: { borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' },
@@ -317,7 +354,7 @@ const AdminDashboard = () => {
                     style={{ ...styles.menuBtn, width: 'auto', padding: '6px 16px', margin: 0, backgroundColor: vistaActiva === 'devoluciones' ? '#ad1457' : '#fff', color: vistaActiva === 'devoluciones' ? '#fff' : '#ad1457' }} 
                     onClick={() => { setVistaActiva('devoluciones'); cargarDatosAdmin(); }}
                 >
-                    📡 Devoluciones
+                    ↩️ Devoluciones
                 </button>
                 <button 
                     style={{ ...styles.menuBtn, width: 'auto', padding: '6px 16px', margin: 0, backgroundColor: vistaActiva === 'ventas' ? '#ad1457' : '#fff', color: vistaActiva === 'ventas' ? '#fff' : '#ad1457' }} 
@@ -506,43 +543,170 @@ const AdminDashboard = () => {
                         {vistaActiva === 'usuarios' && (
                             <div>
                                 <h3 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>👥 Administración de empleados.</h3>
-                                <Form onSubmit={handleAddUser} className="row g-2 mb-4 p-2 bg-light rounded align-items-end m-0">
-                                    <Col md={5}><Form.Control type="text" placeholder="Username" value={nuevoUsername} onChange={e => setNuevoUsername(e.target.value)} size="sm" required /></Col>
-                                    <Col md={4}>
+                                <Form onSubmit={handleAddUser} autoComplete="off" className="row g-2 mb-4 p-2 bg-light rounded align-items-end m-0">
+                                    {/* Input de Nombre */}
+                                    <Col md={3}>
+                                        <Form.Control 
+                                            type="text" 
+                                            placeholder="Nuevo usuario" 
+                                            value={nuevoUsername} 
+                                            onChange={e => setNuevoUsername(e.target.value)} 
+                                            size="sm" 
+                                            autoComplete="new-username"
+                                            required 
+                                        />
+                                    </Col>
+                                    
+                                 
+                                    <Col md={3}>
+                                        <InputGroup size="sm">
+                                            <Form.Control 
+                                                type={showNewPass ? "text" : "password"}
+                                                placeholder="Contraseña" 
+                                                value={nuevoPassword} 
+                                                onChange={e => setNuevoPassword(e.target.value)} 
+                                                required 
+                                            />
+                                            <Button 
+                                                variant="outline-secondary"
+                                                style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
+                                                onClick={() => setShowNewPass(!showNewPass)}
+                                            >
+                                                {showNewPass ? '🙈' : '👁️'}
+                                            </Button>
+                                        </InputGroup>
+                                    </Col>
+
+                                    {/* Select de Rol */}
+                                    <Col md={3}>
                                         <Form.Select value={nuevoRol} onChange={e => setNuevoRol(e.target.value)} size="sm">
-                                            <option value="admin">Administrador</option><option value="encargado">Encargado</option><option value="vendedor">Vendedor</option><option value="cliente">Cliente</option>
+                                            <option value="admin">Administrador</option>
+                                            <option value="encargado">Encargado</option>
+                                            <option value="vendedor">Vendedor</option>
+                                            <option value="cliente">Cliente</option>
                                         </Form.Select>
                                     </Col>
-                                    <Col md={3}><Button type="submit" variant="success" className="w-100 btn-sm" style={{ height: '31px' }}>➕ Añadir</Button></Col>
+                                    
+                                    {/* Botón Añadir */}
+                                    <Col md={3}>
+                                        <Button type="submit" variant="success" className="w-100 btn-sm" style={{ height: '31px' }}>
+                                            ➕ Añadir
+                                        </Button>
+                                    </Col>
                                 </Form>
 
                                 <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
-                                    <thead className="table-light"><tr><th>ID</th><th>Usuario</th><th>Rol</th><th>Acciones</th></tr></thead>
+                                    <thead className="table-light"><tr><th>ID</th><th>Usuario</th><th>Rol</th><th>Contraseña</th><th>Acciones</th></tr></thead>
                                     <tbody>
                                         {listaUsuarios.map((u, i) => (
                                             <tr key={i} className="border-bottom">
                                                 <td>{u.id}</td>
+                                                
+                                                {/* Columna Usuario */}
                                                 <td className="text-start">
-                                                    {editandoId === u.id ? <Form.Control type="text" value={editUsername} onChange={e => setEditUsername(e.target.value)} size="sm" /> : <span className="fw-bold">{u.username}</span>}
+                                                    {editandoId === u.id ? (
+                                                        <Form.Control 
+                                                            type="text" 
+                                                            value={editUsername} 
+                                                            onChange={e => setEditUsername(e.target.value)} 
+                                                            size="sm" 
+                                                        />
+                                                    ) : (
+                                                        <span className="fw-bold">{u.username}</span>
+                                                    )}
                                                 </td>
+                                                
+                                                {/* Columna Rol */}
                                                 <td>
                                                     {editandoId === u.id ? (
                                                         <Form.Select value={editRol} onChange={e => setEditRol(e.target.value)} size="sm">
-                                                            <option value="admin">admin</option><option value="encargado">encargado</option><option value="vendedor">vendedor</option><option value="cliente">cliente</option>
+                                                            <option value="admin">admin</option>
+                                                            <option value="encargado">encargado</option>
+                                                            <option value="vendedor">vendedor</option>
+                                                            <option value="cliente">cliente</option>
                                                         </Form.Select>
-                                                    ) : <Badge bg="danger">{u.rol}</Badge>}
-                                                </td>
-                                                <td>
-                                                    {editandoId === u.id ? (
-                                                        <><Button variant="primary" className="btn-sm py-0 me-1" onClick={() => handleSaveEditUser(u.id)}>Guardar</Button><Button variant="dark" className="btn-sm py-0" onClick={() => setEditandoId(null)}>X</Button></>
                                                     ) : (
-                                                        <><Button variant="outline-secondary" className="btn-sm py-0 me-1" onClick={() => setEditandoId(u.id)}>✏️</Button><Button variant="outline-danger" className="btn-sm py-0" onClick={() => handleDeleteUser(u.id, u.username)}>🗑️</Button></>
+                                                        <Badge bg="danger">{u.rol}</Badge>
                                                     )}
                                                 </td>
+
+                                                {/* 🟢 NUEVA SECCIÓN: Campo temporal de contraseña solo visible al editar */}
+                                                <td>
+                                                        {editandoId === u.id ? (
+                                                            <InputGroup size="sm">
+                                                                <Form.Control 
+                                                                    type={showPass ? "text" : "password"}
+                                                                    placeholder="Nueva contraseña (opcional)" 
+                                                                    value={editPassword || ''} 
+                                                                    onChange={e => setEditPassword(e.target.value)} 
+                                                                    style={{ fontSize: '0.75rem' }}
+                                                                />
+                                                                {/* 🟢 BOTÓN DEL OJO INTEGRADO */}
+                                                                <Button 
+                                                                    variant="outline-secondary"
+                                                                    style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
+                                                                    onClick={() => setShowPass(!showPass)}
+                                                                >
+                                                                    {showPass ? '🙈' : '👁️'}
+                                                                </Button>
+                                                            </InputGroup>
+                                                        ) : (
+                                                            <span className="text-muted small">
+                                                                👤 ••••••••
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                
+                                                {/* Columna Acciones */}
+                                                <td>
+                                                    {editandoId === u.id ? (
+                                                        <>
+                                                            <Button variant="primary" className="btn-sm py-0 me-1" style={{ fontSize: '0.75rem' }} onClick={() => handleSaveEditUser(u.id)}>Guardar</Button>
+                                                            <Button variant="dark" className="btn-sm py-0" style={{ fontSize: '0.75rem' }} onClick={() => { setEditandoId(null); setEditPassword(''); setShowPass(false); }}>X</Button>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Button variant="outline-secondary" className="btn-sm py-0 me-1" onClick={() => { setEditandoId(u.id); setEditUsername(u.username); setEditRol(u.rol); setEditPassword(''); setShowPass(false); }}>✏️</Button>
+                                                            <Button variant="outline-danger" className="btn-sm py-0" onClick={() => { setUserIdAEliminar(u.id); setUsernameAEliminar(u.username); setShowDeleteModal(true); }}>🗑️</Button>
+                                                        </>
+                                                    )}
+                                                </td>
+                                                
                                             </tr>
                                         ))}
                                     </tbody>
                                 </Table>
+                                {/* ====== MODAL DE CONFIRMACIÓN DE ELIMINACIÓN ====== */}
+                                <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} centered size="sm">
+                                    <Modal.Header closeButton className="border-0 pb-0">
+                                        <Modal.Title className="fw-bold text-danger h6">⚠️ Confirmar Acción</Modal.Title>
+                                    </Modal.Header>
+                                    <Modal.Body className="text-center py-3">
+                                        <p className="m-0 small">
+                                            ¿Estás segura de eliminar al usuario <strong className="text-dark">"{usernameAEliminar}"</strong>?
+                                        </p>
+                                    </Modal.Body>
+                                    <Modal.Footer className="border-0 pt-0 d-flex justify-content-center gap-2">
+                                        <Button 
+                                            variant="light" 
+                                            className="btn-sm px-3" 
+                                            onClick={() => setShowDeleteModal(false)}
+                                        >
+                                            Cancelar
+                                        </Button>
+                                        <Button 
+                                            variant="danger" 
+                                            className="btn-sm px-3" 
+                                            onClick={() => {
+                                                // Aquí ejecutas tu lógica real de borrado (Fetch a tu API)
+                                                handleDeleteUser(userIdAEliminar); 
+                                                setShowDeleteModal(false); // Cierra al terminar
+                                            }}
+                                        >
+                                            Eliminar
+                                        </Button>
+                                    </Modal.Footer>
+                                </Modal>
                             </div>
                         )}
 
@@ -615,6 +779,53 @@ const AdminDashboard = () => {
                                                     </td>
                                                     <td className="text-muted">
                                                         {venta.fecha_venta ? new Date(venta.fecha_venta).toLocaleString('es-MX') : '---'}
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </Table>
+                            </div>
+                        )}
+                        {vistaActiva === 'devoluciones' && (
+                            <div className="animate__animated animate__fadeIn">
+                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>↩️ Control de Devoluciones</h5>
+                                <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
+                                    <thead className="table-light">
+                                        <tr>
+                                            <th>Folio Devolución</th>
+                                            <th>Ticket Orig.</th>
+                                            <th>Prenda / Artículo</th>
+                                            <th>Cant.</th>
+                                            <th>Motivo</th>
+                                            <th>Total Reembolsado</th>
+                                            <th>Método</th>
+                                            <th>Autorizó</th>
+                                            <th>Fecha y Hora</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {devolucionesData.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="9" className="text-muted py-3">No hay devoluciones registradas hoy.</td>
+                                            </tr>
+                                        ) : (
+                                            devolucionesData.map((dev, i) => (
+                                                <tr key={i} className="border-bottom">
+                                                    <td className="fw-bold text-secondary">#DEV-{dev.id}</td>
+                                                    <td className="text-muted">#V-{dev.venta_id}</td>
+                                                    <td className="text-start">{dev.producto_detalle}</td>
+                                                    <td>{dev.cantidad}</td>
+                                                    <td className="text-muted text-start" style={{ fontSize: '0.8rem' }}>{dev.motivo_devolucion}</td>
+                                                    <td className="fw-bold text-danger">-${parseFloat(dev.monto_reembolsado).toFixed(2)}</td>
+                                                    <td>
+                                                        <Badge bg={dev.tipo_reembolso === 'Nota de Crédito' ? 'purple' : 'dark'} style={{ backgroundColor: dev.tipo_reembolso === 'Nota de Crédito' ? '#7b1fa2' : '#616161' }}>
+                                                            {dev.tipo_reembolso}
+                                                        </Badge>
+                                                    </td>
+                                                    <td><Badge bg="secondary">{dev.operador_name || 'admin'}</Badge></td>
+                                                    <td className="text-muted" style={{ fontSize: '0.8rem' }}>
+                                                        {dev.fecha_devolucion ? new Date(dev.fecha_devolucion).toLocaleString('es-MX') : '---'}
                                                     </td>
                                                 </tr>
                                             ))
