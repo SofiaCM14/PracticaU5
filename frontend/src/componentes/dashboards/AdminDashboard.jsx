@@ -37,6 +37,7 @@ const AdminDashboard = () => {
     const [editProdDescripcion, setEditProdDescripcion] = useState('');
     const [editProdImagen, setEditProdImagen] = useState('');
     const [editProdTags, setEditProdTags] = useState('');
+    const [ventasData, setVentasData] = useState([]);
 
     const usuarioActivo = localStorage.getItem('username') || 'admin_sofi';
     const rolActivo = localStorage.getItem('userRole') || 'admin';
@@ -68,6 +69,18 @@ const AdminDashboard = () => {
                 const datosUsuarios = await resUser.json();
                 setListaUsuarios(datosUsuarios);
             }
+            const resVentas = await fetch('http://34.219.103.28:3000/api/productos/ventas', {
+            method: 'GET',
+            headers: { 
+                'Content-Type': 'application/json', 
+                'username': usuarioActivo, // Enviamos tu cabecera para el bypass de seguridad
+                ...authHeaders 
+            }
+        });
+        if (resVentas.ok) {
+            const datosVentas = await resVentas.json();
+            setVentasData(datosVentas); // Guarda las ventas en el estado
+        }
         } catch (error) {
             console.error("Error de conectividad AWS RDS:", error);
         }
@@ -260,8 +273,9 @@ const AdminDashboard = () => {
 
     return (
         <div className="w-100 px-1" style={styles.mainContainer}>
+            {/* ==================== 1. BANNER DE BIENVENIDA (HEADER) ==================== */}
             <header style={styles.headerSection}>
-                <Row className="text-center align-items-center m-0">
+                <Row className="text-center align-items-center m-0 w-100">
                     <Col className="p-0">
                         <h2 className="fw-bold m-0 text-white" style={{ fontSize: '1.7rem' }}>
                             Bienvenida a tu panel de Gerencia y administración, {usuarioActivo} 👑
@@ -270,34 +284,55 @@ const AdminDashboard = () => {
                 </Row>
             </header>
 
+            <nav className="d-flex justify-content-center align-items-center gap-2 my-3 p-2 bg-light rounded shadow-sm mx-auto" style={{ maxWidth: '95%' }}>                
+                <button 
+                    style={{ ...styles.menuBtn, width: 'auto', padding: '6px 16px', margin: 0, backgroundColor: vistaActiva === 'inventario' ? '#ad1457' : '#fff', color: vistaActiva === 'inventario' ? '#ffffff' : '#ad1457' }} 
+                    onClick={() => { setVistaActiva('inventario'); cargarDatosAdmin(); }}
+                >
+                    👗 Prendas
+                </button>
+                
+                <button 
+                    style={{ ...styles.menuBtn, width: 'auto', padding: '6px 16px', margin: 0, backgroundColor: vistaActiva === 'mercancia' ? '#ad1457' : '#fff', color: vistaActiva === 'mercancia' ? '#fff' : '#ad1457' }} 
+                    onClick={() => { setVistaActiva('mercancia'); cargarDatosAdmin(); }}
+                >
+                    🚛 Recepción de Mercancía
+                </button>
+                
+                <button 
+                    style={{ ...styles.menuBtn, width: 'auto', padding: '6px 16px', margin: 0, backgroundColor: vistaActiva === 'usuarios' ? '#ad1457' : '#fff', color: vistaActiva === 'usuarios' ? '#fff' : '#ad1457' }} 
+                    onClick={() => { setVistaActiva('usuarios'); cargarDatosAdmin(); }}
+                >
+                    👥 Empleados
+                </button>
+                
+                <button 
+                    style={{ ...styles.menuBtn, width: 'auto', padding: '6px 16px', margin: 0, backgroundColor: vistaActiva === 'auditoria' ? '#ad1457' : '#fff', color: vistaActiva === 'auditoria' ? '#fff' : '#ad1457' }} 
+                    onClick={() => { setVistaActiva('auditoria'); cargarDatosAdmin(); }}
+                >
+                    📡 Movimientos
+                </button>
+                
+                <button 
+                    style={{ ...styles.menuBtn, width: 'auto', padding: '6px 16px', margin: 0, backgroundColor: vistaActiva === 'devoluciones' ? '#ad1457' : '#fff', color: vistaActiva === 'devoluciones' ? '#fff' : '#ad1457' }} 
+                    onClick={() => { setVistaActiva('devoluciones'); cargarDatosAdmin(); }}
+                >
+                    📡 Devoluciones
+                </button>
+                <button 
+                    style={{ ...styles.menuBtn, width: 'auto', padding: '6px 16px', margin: 0, backgroundColor: vistaActiva === 'ventas' ? '#ad1457' : '#fff', color: vistaActiva === 'ventas' ? '#fff' : '#ad1457' }} 
+                    onClick={() => { setVistaActiva('ventas'); cargarDatosAdmin(); }}
+                >
+                    🛍️ Ventas
+                </button>
+            </nav>
+
             {alertMessage && <Alert variant="success" onClose={() => setAlertMessage(null)} dismissible className="m-0 rounded-0 py-2">{alertMessage}</Alert>}
 
             <Row className="g-0 m-0">
-                <Col md={3} className="p-0">
-                    <div style={styles.sidebar} className="d-flex flex-column justify-content-between">
-                        <div>
-                            <h6 className="fw-bold uppercase mb-3 text-center pb-2" style={{ color: '#ad1457', borderBottom: '1px solid #f8bbd0', fontSize: '0.85rem' }}>📋 MENÚ OPERATIVO</h6>
-                            <button style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'inventario' ? '#ad1457' : '#fff', color: vistaActiva === 'inventario' ? '#fff' : '#ad1457' }} onClick={() => { setVistaActiva('inventario'); cargarDatosAdmin(); }}>
-                                👗 Prendas
-                            </button>
-                            <button style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'mercancia' ? '#ad1457' : '#fff', color: vistaActiva === 'mercancia' ? '#fff' : '#ad1457' }} onClick={() => { setVistaActiva('mercancia'); cargarDatosAdmin(); }}>
-                                🚛 Recepción de Mercancía
-                            </button>
-                            <button style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'usuarios' ? '#ad1457' : '#fff', color: vistaActiva === 'usuarios' ? '#fff' : '#ad1457' }} onClick={() => { setVistaActiva('usuarios'); cargarDatosAdmin(); }}>
-                                👥 Empleados
-                            </button>
-                            <button style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'auditoria' ? '#ad1457' : '#fff', color: vistaActiva === 'auditoria' ? '#fff' : '#ad1457' }} onClick={() => { setVistaActiva('auditoria'); cargarDatosAdmin(); }}>
-                                📡 Movimientos
-                            </button>
-                            <button style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'auditoria' ? '#ad1457' : '#fff', color: vistaActiva === 'auditoria' ? '#fff' : '#ad1457' }} onClick={() => { setVistaActiva('auditoria'); cargarDatosAdmin(); }}>
-                                📡 Devoluciones
-                            </button>
-                        </div>
-                        <div className="text-center pt-2 border-top small fw-bold" style={{ color: '#ad1457', borderColor: '#f8bbd0', fontSize: '0.8rem' }}>🟢 AWS RDS Connected 🖥️</div>
-                    </div>
-                </Col>
+                
 
-                <Col md={9} className="p-0">
+                <Col md={12} className="p-0">
                     <div style={styles.contentArea}>
                         {vistaActiva === 'bienvenida' && (
                             <div className="text-center py-5">
@@ -414,8 +449,7 @@ const AdminDashboard = () => {
                                 }}
                             >
                                 <div className="mb-4 text-center pb-2 border-bottom">
-                                    <h3 className="fw-bold mb-1" style={{ color: '#ad1457' }}>🚛 Entrada de Nueva Mercancía</h3>
-                                    <span className="text-muted small">Inyección directa de prendas hacia el clúster transaccional AWS RDS</span>
+                                    <h3 className="fw-bold mb-1" style={{ color: '#ad1457' }}>🚛 Agrega una nueva prenda</h3>
                                 </div>
 
                                 <Form onSubmit={handleAddProduct}>
@@ -462,7 +496,7 @@ const AdminDashboard = () => {
                                     </Form.Group>
 
                                     <Button type="submit" className="w-100 fw-bold py-3 text-white shadow-sm" style={{ backgroundColor: '#ad1457', border: 'none', borderRadius: '10px' }}>
-                                        Guardar Nueva Mercancía en AWS RDS 🚀
+                                        Guardar Nuevo Producto.
                                     </Button>
                                 </Form>
                             </div>
@@ -471,7 +505,7 @@ const AdminDashboard = () => {
                         {/* 👥 CONTROL DE USUARIOS */}
                         {vistaActiva === 'usuarios' && (
                             <div>
-                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>👥 Personal de la Boutique</h5>
+                                <h3 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>👥 Administración de empleados.</h3>
                                 <Form onSubmit={handleAddUser} className="row g-2 mb-4 p-2 bg-light rounded align-items-end m-0">
                                     <Col md={5}><Form.Control type="text" placeholder="Username" value={nuevoUsername} onChange={e => setNuevoUsername(e.target.value)} size="sm" required /></Col>
                                     <Col md={4}>
@@ -515,7 +549,7 @@ const AdminDashboard = () => {
                         {/* 📡 AUDITORÍA */}
                         {vistaActiva === 'auditoria' && (
                             <div>
-                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>📡 Bitácora Transaccional</h5>
+                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>📡 Movimientos en el sistema.</h5>
                                 <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
                                     <thead className="table-light">
                                         <tr>
@@ -543,6 +577,52 @@ const AdminDashboard = () => {
                                 </Table>
                             </div>
                         )}
+                        {/* ====== AGREGA ESTA VISTA EN AdminDashboard.jsx ====== */}
+                        {vistaActiva === 'ventas' && (
+                            <div className="animate__animated animate__fadeIn">
+                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>💰 Historial de Ventas.</h5>
+                                <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
+                                    <thead className="table-light">
+                                        <tr>
+                                            <th>Folio</th>
+                                            <th>Vendedor</th>
+                                            <th>Rol</th>
+                                            <th>Descuento</th>
+                                            <th>Total Cobrado</th>
+                                            <th>Fecha y Hora</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {ventasData.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="6" className="text-muted py-3">No hay ventas registradas todavía.</td>
+                                            </tr>
+                                        ) : (
+                                            ventasData.map((venta, i) => (
+                                                <tr key={i} className="border-bottom">
+                                                    <td className="fw-bold text-secondary">#V-{venta.id}</td>
+                                                    <td>{venta.vendedor_name || 'Desconocido'}</td>
+                                                    <td>
+                                                        <Badge bg={venta.rol === 'admin' ? 'danger' : 'secondary'}>
+                                                            {venta.rol || 'vendedor'}
+                                                        </Badge>
+                                                    </td>
+                                                    <td className="text-muted">
+                                                        ${parseFloat(venta.descuento_aplicado || 0).toFixed(2)}
+                                                    </td>
+                                                    <td className="fw-bold text-success">
+                                                        ${parseFloat(venta.total).toFixed(2)}
+                                                    </td>
+                                                    <td className="text-muted">
+                                                        {venta.fecha_venta ? new Date(venta.fecha_venta).toLocaleString('es-MX') : '---'}
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </Table>
+                            </div>
+                        )}
                     </div>
                 </Col>
             </Row>
@@ -550,7 +630,7 @@ const AdminDashboard = () => {
             {/* 🛠️ CONSOLA MODAL CON VISTA PREVIA CORTADA EXCLUSIVAMENTE EN EL COMPONENTE */}
             <Modal show={showProdModal} onHide={() => setShowProdModal(false)} centered size="lg">
                 <Modal.Header closeButton style={{ borderBottom: '1px solid #f8bbd0' }}>
-                    <Modal.Title className="fw-bold" style={{ color: '#ad1457' }}>⚙️ Modificación Completa de Prenda</Modal.Title>
+                    <Modal.Title className="fw-bold" style={{ color: '#ad1457' }}>⚙️ Actualizar Prenda</Modal.Title>
                 </Modal.Header>
                 <Modal.Body style={{ backgroundColor: '#fffdfd' }}>
                     <Form onSubmit={handleSaveEditProduct}>
@@ -615,7 +695,7 @@ const AdminDashboard = () => {
                         </Form.Group>
 
                         <Button type="submit" style={{ backgroundColor: '#ad1457', border: 'none' }} className="w-100 fw-bold py-2 text-white shadow-sm">
-                            Aplicar Cambios en AWS RDS 🚀
+                            Aplicar Cambios.
                         </Button>
                     </Form>
                 </Modal.Body>

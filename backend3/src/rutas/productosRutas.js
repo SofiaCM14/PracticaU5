@@ -218,27 +218,22 @@ router.put('/:id', async (req, res) => {
 // ========================================================
 // 4, 5, 6, 7 y 8. RESTO DE TUS ENDPOINTS (VENTAS, CAJA, ETC)
 // ========================================================
-router.post('/venta', async (req, res) => {
-    const { total, items, usuario, rol } = req.body; 
-    const client = await pool.connect();
+// ====== AGREGA ESTA RUTA EN TU backend3/src/rutas/productosRutas.js ======
+
+router.get('/ventas', verificarToken, async (req, res) => {
     try {
-        await client.query('BEGIN');
-        const venta = await client.query('INSERT INTO ventas (fecha, total) VALUES (NOW(), $1) RETURNING id;', [total]);
-        const ventaId = venta.rows[0].id;
-        for (let item of items) {
-            await client.query('INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio) VALUES ($1, $2, $3, $4);', [ventaId, item.producto_id, item.cantidad, item.precio]);
-            await client.query('UPDATE productos SET stock = stock - $1 WHERE id = $2;', [item.cantidad, item.producto_id]);
-        }
-        const usuarioId = await getUsuarioId(usuario);
-        await client.query('INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) VALUES ($1, $2, $3, NOW());', [usuarioId, 'Venta POS', `Ticket #${ventaId} cobrado por $${total}`]);
-        await client.query('COMMIT');
-        res.status(201).json({ message: 'Venta procesada con éxito', ventaId });
+        // Hacemos el INNER JOIN con usuarios para jalar el string del nombre del vendedor
+        const query = `
+            SELECT v.id, v.total, v.descuento_aplicado, v.fecha_venta, u.username as vendedor_name, u.rol
+            FROM ventas v
+            INNER JOIN usuarios u ON v.usuario_id = u.id
+            ORDER BY v.fecha_venta DESC;
+        `;
+        const result = await pool.query(query);
+        res.json(result.rows);
     } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('ERROR VENTA:', error);
-        res.status(500).json({ error: 'Error al procesar la venta', details: error.message });
-    } finally {
-        client.release();
+        console.error('Error al obtener el historial de ventas:', error);
+        res.status(500).json({ error: 'No se pudo cargar el historial de ventas.' });
     }
 });
 
