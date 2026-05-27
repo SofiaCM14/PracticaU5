@@ -232,21 +232,42 @@ router.put('/:id', async (req, res) => {
 // =================================================================
 // 🛍️ ENDPOINT 1: OBTENER VENTAS DEL TURNO (GET)
 // =================================================================
+// =================================================================
+// 🛍️ ENDPOINT: OBTENER VENTAS EXCLUSIVAS DEL TURNO ACTIVO
+// =================================================================
 router.get('/ventas', verificarToken, async (req, res) => {
     try {
-        // Traemos las últimas ventas del usuario para que la tabla siempre tenga registros visuales
-        // y puedas darle clic a "Ver Detalle" en cualquier momento.
-        const queryVentas = `
-            SELECT id, usuario_id, total, fecha_venta, descuento
-            FROM ventas 
-            ORDER BY id DESC LIMIT 50;
+        // 1. Buscamos la última caja que se encuentre 'abierta'
+        const queryCaja = `
+            SELECT fecha_apertura 
+            FROM movimientos_caja 
+            WHERE estado = 'abierta' 
+            ORDER BY id DESC LIMIT 1;
         `;
-        const resVentas = await pool.query(queryVentas);
+        const resCaja = await pool.query(queryCaja);
+
+        // 2. Si no hay ninguna caja abierta (Corte hecho), limpiamos el historial mandando un arreglo vacío
+        if (resCaja.rows.length === 0) {
+            return res.status(200).json([]);
+        }
+
+        const fechaApertura = resCaja.rows[0].fecha_apertura;
+
+        // 3. Traemos SOLO las ventas que se hicieron desde que se abrió esta caja
+        // Usamos las columnas nativas para que tu Frontend las mapée sin problemas
+        const queryVentas = `
+            SELECT id, usuario_id, total, fecha_venta, descuento_aplicado
+            FROM ventas 
+            WHERE fecha_venta >= $1
+            ORDER BY id DESC;
+        `;
+        const resVentas = await pool.query(queryVentas, [fechaApertura]);
+        
         res.status(200).json(resVentas.rows);
 
     } catch (error) {
-        console.error("Error al obtener el historial de ventas:", error);
-        res.status(500).json({ error: "No se pudieron obtener las ventas." });
+        console.error("Error al filtrar las ventas del turno activo:", error);
+        res.status(500).json({ error: "No se pudieron obtener las ventas del turno." });
     }
 });
 // 📄 ENDPOINT 2: DESGLOSE DE PRENDAS DE UN CORTE ESPECÍFICO (GET)

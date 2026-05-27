@@ -127,58 +127,22 @@ const AdminDashboard = () => {
             console.error("Error de conectividad AWS RDS:", error);
         }
     };
-    const handleVerDetalleVenta = async (ventaId) => {
-    try {
-        const authHeaders = getAuthHeaders();
-        // Cambia este fetch según el endpoint real que tengas para los detalles de la venta
-        const response = await fetch(`http://34.219.103.28:3000/api/productos/ventas/${ventaId}`, {
-            method: 'GET',
-            headers: authHeaders
-        });
-        const datosVenta = await response.json();
-
-        const ventana = window.open('', '_blank', 'width=420,height=600,scrollbars=yes');
-        ventana.document.write(`
-            <html>
-            <head>
-                <title>Ticket de Venta #V-${ventaId}</title>
-                <style>
-                    body { font-family: 'Courier New', monospace; width: 300px; margin: 0 auto; padding: 20px 10px; }
-                    .text-center { text-align: center; }
-                    .linea-divisoria { border-top: 1px dashed #000; margin: 8px 0; }
-                    .flex-justify { display: flex; justify-content: space-between; }
-                    
-                    /* 🔘 ZONA DE BOTONES INTERACTIVOS */
-                    .botones-container { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
-                    .btn-ticket { border: none; padding: 6px 12px; font-size: 11px; font-weight: bold; border-radius: 4px; cursor: pointer; font-family: Arial, sans-serif; }
-                    .btn-print { background-color: #2e7d32; color: white; }
-                    .btn-close { background-color: #757575; color: white; }
-                    
-                    @media print { .botones-container { display: none !important; } }
-                </style>
-            </head>
-            <body>
-                <div class="botones-container">
-                    <button class="btn-ticket btn-print" onclick="window.print()">🖨️ Imprimir</button>
-                    <button class="btn-ticket btn-close" onclick="window.close()">❌ Cerrar</button>
-                </div>
-
-                <div class="text-center">
-                    <h3 style="margin:0;">✨ SmartBoutique ✨</h3>
-                    <p style="margin:2px 0; font-size:11px;">TICKET DE VENTA #V-${ventaId}</p>
-                </div>
-                <div class="linea-divisoria"></div>
-                <div class="flex-justify"><span>TOTAL COBRADO:</span><b>$${parseFloat(datosVenta.total || 0).toFixed(2)}</b></div>
-                <div class="linea-divisoria"></div>
-                <div class="text-center" style="font-size: 10px;">¡Gracias por tu compra!</div>
-            </body>
-            </html>
-        `);
-        ventana.document.close();
-    } catch (error) {
-        console.error("Error al generar ticket de venta:", error);
-    }
-};
+    const handleVerDetallesTicket = async (id) => {
+        try {
+            setFolioSeleccionado(id);
+            const res = await fetch(`http://34.219.103.28:3000/api/productos/ventas/detalles/${id}`, {
+                method: 'GET',
+                headers: getAuthHeaders()
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setDetallesTicket(data); 
+                setShowTicketModal(true); // 🟢 Abre el modal en pantalla
+            }
+        } catch (error) {
+            console.error("Error cargando detalles:", error);
+        }
+    };
         // 1. Agregar un artículo al carrito temporal
     const handleAgregarAlCarrito = (e) => {
         e.preventDefault();
@@ -208,47 +172,40 @@ const AdminDashboard = () => {
         setCantidadVenta('');
     };
 
-        const handleCompraDirecta = async (e) => {
+    const handleCompraDirecta = async (e) => {
         e.preventDefault();
 
-        // 1. Validamos que el producto exista en tu lista de prendas local
         const productoExiste = productos.find(p => p.id === parseInt(idProductoVenta));
-        
         if (!productoExiste) {
-            alert("⚠️ El ID del producto no existe en el catálogo.");
+            Swal.fire('⚠️ Atención', 'El ID del producto no existe en el catálogo.', 'warning');
             return;
         }
         
-        // 2. Validamos si hay suficiente stock en AWS
         if (parseInt(cantidadVenta) > productoExiste.stock) {
-            alert(`⚠️ Stock insuficiente. Solo quedan ${productoExiste.stock} pz.`);
+            Swal.fire('⚠️ Stock Insuficiente', `Solo quedan ${productoExiste.stock} pz.`, 'error');
             return;
         }
 
-        // 3. 🎯 LÓGICA DE DESCUENTOS ESTABLECIDOS
         const precioCatalogo = parseFloat(productoExiste.precio);
-        const porcentajeDescuento = parseFloat(descuentoSeleccionado); // Ej: 10 o 20
-        
-        // Calculamos cuánto se le va a restar por cada pieza
+        const porcentajeDescuento = parseFloat(descuentoSeleccionado); 
         const descuentoPorPieza = precioCatalogo * (porcentajeDescuento / 100);
         const precioConDescuento = precioCatalogo - descuentoPorPieza;
         
-        // Calculamos los totales globales de la transacción
         const totalCobradoFinal = parseInt(cantidadVenta) * precioConDescuento;
         const totalDineroDescontado = parseInt(cantidadVenta) * descuentoPorPieza;
 
-        // 4. Estructuramos el cuerpo asegurando el ID correcto del operador activo
         const usuarioIdReal = localStorage.getItem('userId') ? parseInt(localStorage.getItem('userId')) : 1;
 
         const datosVenta = {
             total: totalCobradoFinal,
-            descuento_aplicado: totalDineroDescontado, // ──> 🟢 Ahora mandamos los pesos reales ahorrados a la BD
+            descuento_aplicado: totalDineroDescontado, 
             usuario_id: usuarioIdReal,
             carrito: [
                 {
                     producto_id: productoExiste.id,
+                    container: parseInt(cantidadVenta),
                     cantidad: parseInt(cantidadVenta),
-                    precio_unitario: precioConDescuento // ──> 🟢 Se registra con el precio rebajado en detalle_ventas
+                    precio_unitario: precioConDescuento 
                 }
             ]
         };
@@ -266,24 +223,34 @@ const AdminDashboard = () => {
             if (res.ok) {
                 const data = await res.json();
                 
-                // Limpiamos los campos de la caja registradora
+                // 1. Limpiamos inmediatamente los campos de la caja registradora
                 setIdProductoVenta('');
                 setCantidadVenta('');
-                setDescuentoSeleccionado('0'); // Resetea el menú de descuentos a "Sin Descuento"
+                setDescuentoSeleccionado('0'); 
                 
-                // Forzamos la actualización del historial en segundo plano
+                // 2. FORZAMOS la actualización del historial en segundo plano para que aparezca el renglón
                 await cargarDatosAdmin(); 
                 
-                // Damos un breve tiempo para pintar el historial antes de abrir el ticket
-                setTimeout(() => {
-                    handleVerDetallesTicket(data.venta_id);
-                }, 300);
+                // 3. 🎉 Alerta rápida en la esquina superior derecha que no interrumpe el flujo
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: `Venta registrada con éxito (Folio #V-${data.venta_id})`,
+                    showConfirmButton: false,
+                    timer: 2000,
+                    timerProgressBar: true
+                });
+
+                // 🟢 SE ELIMINÓ EL SEATTIMEOUT QUE DISPARABA EL TICKET EN AUTOMÁTICO.
+                // Ahora el flujo queda limpio tal como lo pediste.
 
             } else {
-                alert("Error al registrar la venta en el servidor.");
+                Swal.fire('❌ Error', 'Error al registrar la venta en el servidor.', 'error');
             }
         } catch (error) {
             console.error("Error en la transacción exprés:", error);
+            Swal.fire('❌ Error', 'Error de comunicación con el servidor.', 'error');
         }
     };
 
@@ -1206,27 +1173,39 @@ const AdminDashboard = () => {
                                 <tbody>
                                     {ventasData.length === 0 ? (
                                         <tr>
-                                            <td colSpan="7" className="text-muted py-3">No hay ventas registradas todavía.</td>
+                                            <td colSpan="7" className="text-muted py-3">No hay ventas registradas en este turno de caja.</td>
                                         </tr>
                                     ) : (
                                         ventasData.map((venta, i) => (
                                             <tr key={i} className="border-bottom">
+                                                {/* 🔢 Folio del Turno */}
                                                 <td className="fw-bold text-secondary">#V-{venta.id}</td>
-                                                <td>{venta.vendedor_name || 'Desconocido'}</td>
+                                                
+                                                {/* 👤 Operador */}
+                                                <td>{venta.username || `Empleado (ID: ${venta.usuario_id})`}</td>
+                                                
                                                 <td>
                                                     <Badge bg={venta.rol === 'admin' ? 'danger' : 'secondary'}>
                                                         {venta.rol || 'vendedor'}
                                                     </Badge>
                                                 </td>
+                                                
+                                                {/* 💰 Descuento aplicado */}
                                                 <td className="text-muted">
-                                                    ${parseFloat(venta.descuento_aplicado || 0).toFixed(2)}
+                                                    ${venta.descuento_aplicado ? parseFloat(venta.descuento_aplicado).toFixed(2) : '0.00'}
                                                 </td>
+                                                
+                                                {/* 💵 Total Cobrado en Caliente */}
                                                 <td className="fw-bold text-success">
-                                                    ${parseFloat(venta.total).toFixed(2)}
+                                                    ${venta.total ? parseFloat(venta.total).toFixed(2) : '0.00'}
                                                 </td>
+                                                
+                                                {/* 📅 Fecha Hora Local */}
                                                 <td className="text-muted">
                                                     {venta.fecha_venta ? new Date(venta.fecha_venta).toLocaleString('es-MX') : '---'}
                                                 </td>
+                                                
+                                                {/* 👁️ Acción para ver el Ticket Modal individual */}
                                                 <td>
                                                     <Button 
                                                         variant="outline-secondary" 
@@ -1245,10 +1224,33 @@ const AdminDashboard = () => {
                         </div>
                     )}
                     {/* ====== MODAL INTERACTIVO: DESGLOSE DE TICKET COMPLETO CON DESCUENTOS ====== */}
+                    {/* ====== MODAL INTERACTIVO: DESGLOSE DE TICKET COMPLETO CON DESCUENTOS ====== */}
                     <Modal show={showTicketModal} onHide={() => setShowTicketModal(false)} centered size="sm">
                         <Modal.Body className="p-4" style={{ fontFamily: 'Courier New, Courier, monospace', backgroundColor: '#ffffff' }}>
                             
-                            {/* Encabezado del Ticket */}
+                            {/* 🔘 ZONA DE BOTONES INTERACTIVOS COMPORTAMIENTO CLOUD (Se oculta al mandar a imprimir) */}
+                            <div className="d-flex gap-2 justify-content-center mb-4 d-print-none">
+                                <Button 
+                                    variant="success" 
+                                    size="sm" 
+                                    className="fw-bold px-3 shadow-sm border-0"
+                                    style={{ backgroundColor: '#2e7d32' }}
+                                    onClick={() => window.print()}
+                                >
+                                    🖨️ Imprimir
+                                </Button>
+                                <Button 
+                                    variant="secondary" 
+                                    size="sm" 
+                                    className="fw-bold px-3 shadow-sm border-0"
+                                    style={{ backgroundColor: '#757575' }}
+                                    onClick={() => setShowTicketModal(false)}
+                                >
+                                    ❌ Cerrar
+                                </Button>
+                            </div>
+
+                            {/* 📋 CONTENIDO DEL TICKET IMPRIMIBLE */}
                             <div className="text-center mb-3">
                                 <h5 className="fw-bold m-0" style={{ color: '#ad1457', letterSpacing: '1px' }}>✨ SMART BOUTIQUE ✨</h5>
                                 <small className="text-muted d-block" style={{ fontSize: '0.75rem' }}>Instituto Tecnológico Superior de Apatzingán</small>
@@ -1266,7 +1268,6 @@ const AdminDashboard = () => {
                                 </div>
                                 <div className="my-1" style={{ borderTop: '1px dashed #ced4da' }}></div>
 
-                                {/* Mapeo dinámico de los artículos que vienen desde AWS */}
                                 {detallesTicket.map((item, i) => (
                                     <div key={i} className="mb-2" style={{ fontSize: '0.75rem', lineHeight: '1.2' }}>
                                         <div className="fw-bold text-dark text-uppercase">{item.nombre_prenda}</div>
@@ -1284,7 +1285,6 @@ const AdminDashboard = () => {
                             <div className="my-2" style={{ borderTop: '1px dashed #ced4da' }}></div>
                             <div style={{ fontSize: '0.75rem', lineHeight: '1.4' }}>
                                 
-                                {/* 1. Cálculo del precio real original de catálogo (Subtotal) */}
                                 <div className="d-flex justify-content-between text-muted">
                                     <span>PRECIO REAL (SUBTOTAL):</span>
                                     <span>
@@ -1296,7 +1296,6 @@ const AdminDashboard = () => {
                                     </span>
                                 </div>
 
-                                {/* 2. Dinero total que se ahorró el cliente (Solo visible si hubo un descuento real) */}
                                 {detallesTicket.reduce((acc, item) => {
                                     const prodOriginal = productos.find(p => p.id === item.producto_id);
                                     const precioOriginal = prodOriginal ? parseFloat(prodOriginal.precio) : parseFloat(item.precio_unitario);
@@ -1316,7 +1315,6 @@ const AdminDashboard = () => {
 
                                 <div className="my-1" style={{ borderTop: '1px dashed #ced4da' }}></div>
 
-                                {/* 3. Total Neto Final de la Transacción */}
                                 <div className="d-flex justify-content-between fw-bold mb-3" style={{ fontSize: '0.85rem' }}>
                                     <span>TOTAL COBRADO:</span>
                                     <span className="text-success">
@@ -1325,20 +1323,9 @@ const AdminDashboard = () => {
                                 </div>
                             </div>
 
-                            {/* Pie de Ticket */}
                             <div className="text-center mt-4">
                                 <p className="m-0 small fw-bold text-muted" style={{ fontSize: '0.7rem' }}>¡Gracias por tu compra! 👑</p>
                                 <small className="text-muted" style={{ fontSize: '0.6rem' }}>SmartBoutique POS v5.0 - Cloud Infrastructure</small>
-                                
-                                <Button 
-                                    variant="dark" 
-                                    size="sm" 
-                                    className="w-100 mt-3 btn-sm border-0" 
-                                    style={{ backgroundColor: '#ad1457', fontSize: '0.75rem' }}
-                                    onClick={() => setShowTicketModal(false)}
-                                >
-                                    Cerrar Ticket
-                                </Button>
                             </div>
 
                         </Modal.Body>
