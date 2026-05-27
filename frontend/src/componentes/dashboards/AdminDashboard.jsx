@@ -19,6 +19,8 @@ const AdminDashboard = () => {
     const [cantidadVenta, setCantidadVenta] = useState('');
     const [descuentoSeleccionado, setDescuentoSeleccionado] = useState('0'); // Guarda el porcentaje como String (0, 10, 20, etc.)
     const [movimientosCajaData, setMovimientosCajaData] = useState([]); // ──> Guardará las aperturas y cierres
+    const [showModalAbrir, setShowModalAbrir] = useState(false); // Controla el modal flotante
+    const [montoInicialInput, setMontoInicialInput] = useState(''); // Guarda la cantidad ingresada
 
     // Formulario de Productos (Inserción rápida y extendida)
     const [nombre, setNombre] = useState('');
@@ -425,7 +427,7 @@ const AdminDashboard = () => {
             console.error("Error al actualizar usuario:", error);
         }
     };
-        const handleCerrarCaja = async () => {
+    const handleCerrarCaja = async () => {
         if (!window.confirm("¿Estás segura de que deseas realizar el corte y cerrar la caja por hoy?")) return;
 
         try {
@@ -446,6 +448,41 @@ const AdminDashboard = () => {
             }
         } catch (error) {
             console.error("Error al conectar el cierre:", error);
+            alert("❌ Error de comunicación con el servidor.");
+        }
+    };
+    const handleAbrirCajaDefinitivo = async (e) => {
+        e.preventDefault();
+        const fondoNum = parseFloat(montoInicialInput);
+
+        if (isNaN(fondoNum) || fondoNum < 0) {
+            alert("Por favor, ingresa una cantidad válida igual o mayor a $0.00");
+            return;
+        }
+
+        try {
+            const authHeaders = getAuthHeaders();
+            const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/abrir-caja', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...authHeaders },
+                body: JSON.stringify({
+                    usuario_id: 1, // ID de admin_sofi
+                    monto_inicial: fondoNum
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                alert(`🔓 ¡Turno Abierto con Éxito!\nFondo Inicial: $${fondoNum.toFixed(2)}`);
+                setShowModalAbrir(false);
+                setMontoInicialInput('');
+                cargarDatosAdmin(); // Refresca las tarjetas en tiempo real
+            } else {
+                alert(`⚠️ Error: ${data.error}`);
+            }
+        } catch (error) {
+            console.error("Error al conectar la apertura:", error);
             alert("❌ Error de comunicación con el servidor.");
         }
     };
@@ -1208,31 +1245,45 @@ const AdminDashboard = () => {
                                         </div>
                                     </div>
 
-                                    {/* Tarjeta 2: BOTÓN CENTRAL DE CIERRE (Maneja el estado 'cerrada') */}
+                                   {/* Tarjeta 2: BOTÓN CENTRAL DINÁMICO (ABRIR / CERRAR) */}
                                     <div className="col-12 col-md-4">
-                                        <button 
-                                            onClick={handleCerrarCaja}
-                                            disabled={movimientosCajaData[0]?.estado !== 'abierta'}
-                                            className="w-100 p-4 shadow border-0 rounded-4 text-white btn-danger position-relative overflow-hidden h-100 d-flex flex-column justify-content-center align-items-center"
-                                            style={{ 
-                                                background: movimientosCajaData[0]?.estado === 'abierta' ? 'linear-gradient(135deg, #d32f2f, #c2185b)' : '#b0bec5',
-                                                transition: 'transform 0.2s, box-shadow 0.2s',
-                                                cursor: movimientosCajaData[0]?.estado === 'abierta' ? 'pointer' : 'not-allowed'
-                                            }}
-                                            onMouseEnter={(e) => movimientosCajaData[0]?.estado === 'abierta' && (e.currentTarget.style.transform = 'scale(1.02)')}
-                                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                                        >
-                                            <div className="fs-1 mb-1">
-                                                {movimientosCajaData[0]?.estado === 'abierta' ? '🔓' : '🔒'}
-                                            </div>
-                                            <span className="fw-bold text-uppercase tracking-wide small text-white-50">Acción de Arqueo</span>
-                                            <h4 className="fw-black m-0 mt-1">
-                                                {movimientosCajaData[0]?.estado === 'abierta' ? 'Realizar Corte de Caja' : 'Corte Procesado'}
-                                            </h4>
-                                            <small className="text-white-50 mt-2">
-                                                {movimientosCajaData[0]?.estado === 'abierta' ? 'Suma las ventas y cierra el turno' : 'Turno finalizado en la BD'}
-                                            </small>
-                                        </button>
+                                        {movimientosCajaData[0]?.estado === 'abierta' ? (
+                                            /* SI ESTÁ ABIERTA: Muestra el botón de realizar corte que ya tenías */
+                                            <button 
+                                                onClick={handleCerrarCaja}
+                                                className="w-100 p-4 shadow border-0 rounded-4 text-white btn-danger h-100 d-flex flex-column justify-content-center align-items-center"
+                                                style={{ 
+                                                    background: 'linear-gradient(135deg, #d32f2f, #c2185b)',
+                                                    transition: 'transform 0.2s',
+                                                    cursor: 'pointer'
+                                                }}
+                                                onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
+                                                onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                            >
+                                                <div className="fs-1 mb-1">🔓</div>
+                                                <span className="fw-bold text-uppercase tracking-wide small text-white-50">Acción de Arqueo</span>
+                                                <h4 className="fw-black m-0 mt-1">Realizar Corte de Caja</h4>
+                                                <small className="text-white-50 mt-2">Suma las ventas del día y cierra el turno</small>
+                                            </button>
+                                        ) : (
+                                            /* SI ESTÁ CERRADA: Se convierte en el disparador para abrir un nuevo turno */
+                                            <button 
+                                                onClick={() => setShowModalAbrir(true)}
+                                                className="w-100 p-4 shadow border-0 rounded-4 text-white h-100 d-flex flex-column justify-content-center align-items-center"
+                                                style={{ 
+                                                    background: 'linear-gradient(135deg, #2e7d32, #1b5e20)',
+                                                    transition: 'transform 0.2s',
+                                                    cursor: 'pointer'
+                                                }}
+                                                onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
+                                                onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                            >
+                                                <div className="fs-1 mb-1">💵</div>
+                                                <span className="fw-bold text-uppercase tracking-wide small text-white-50">Caja Inactiva</span>
+                                                <h4 className="fw-black m-0 mt-1">Abrir Nuevo Turno</h4>
+                                                <small className="text-white-50 mt-2">Ingresa el fondo inicial para operar</small>
+                                            </button>
+                                        )}
                                     </div>
 
                                     {/* Tarjeta 3: Total Vendido + Historial Imprimible */}
@@ -1304,6 +1355,43 @@ const AdminDashboard = () => {
                                 </div>
                             </div>
                         )}
+                        {/* ==================== MODAL DE APERTURA DE TURNO NUEVO ==================== */}
+                        <Modal show={showModalAbrir} onHide={() => setShowModalAbrir(false)} centered backdrop="static">
+                            <Modal.Header closeButton className="border-0 pb-0">
+                                <Modal.Title className="fw-bold fs-6" style={{ color: '#ad1457' }}>
+                                    🔑 Apertura de Caja - SmartBoutique
+                                </Modal.Title>
+                            </Modal.Header>
+                            <form onSubmit={handleAbrirCajaDefinitivo}>
+                                <Modal.Body className="py-3">
+                                    <p className="text-muted small">
+                                        Para iniciar el turno de ventas, por favor ingresa la cantidad de dinero en efectivo que se dejará en caja como fondo inicial (cambio).
+                                    </p>
+                                    <div className="form-group">
+                                        <label className="small fw-bold text-secondary mb-1">Monto Inicial en Efectivo ($):</label>
+                                        <input 
+                                            type="number" 
+                                            step="0.01"
+                                            min="0"
+                                            className="form-control form-control-sm text-center fw-bold text-primary fs-5"
+                                            placeholder="0.00"
+                                            required
+                                            value={montoInicialInput}
+                                            onChange={(e) => setMontoInicialInput(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                </Modal.Body>
+                                <Modal.Footer className="border-0 pt-0">
+                                    <Button variant="secondary" size="sm" onClick={() => setShowModalAbrir(false)}>
+                                        Cancelar
+                                    </Button>
+                                    <Button variant="success" size="sm" type="submit" className="fw-bold">
+                                        🚀 Confirmar y Abrir Turno
+                                    </Button>
+                                </Modal.Footer>
+                            </form>
+                        </Modal>
                        
                         {vistaActiva === 'devoluciones' && (
                             <div className="animate__animated animate__fadeIn">

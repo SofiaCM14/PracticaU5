@@ -357,6 +357,51 @@ router.post('/movimientos-caja/cerrar-caja', verificarToken, async (req, res) =>
         res.status(500).json({ error: "No se pudo procesar el cierre de caja." });
     }
 });
+// =================================================================
+// 🟢 ENDPOINT 3: REALIZAR LA APERTURA DE CAJA (POST)
+// =================================================================
+router.post('/movimientos-caja/abrir-caja', verificarToken, async (req, res) => {
+    const { usuario_id, monto_inicial } = req.body;
+    const idOperador = usuario_id ? parseInt(usuario_id) : 1;
+    const fondo = monto_inicial ? parseFloat(monto_inicial) : 0.00;
+
+    try {
+        await pool.query('BEGIN');
+
+        // 1. Validar que no exista ya una caja ABIERTA para evitar duplicados
+        const queryVerificar = `SELECT id FROM movimientos_caja WHERE estado = 'abierta';`;
+        const resVerificar = await pool.query(queryVerificar);
+
+        if (resVerificar.rows.length > 0) {
+            await pool.query('ROLLBACK');
+            return res.status(400).json({ error: "Ya existe una caja abierta en el sistema." });
+        }
+
+        // 2. Insertar el nuevo registro de apertura
+        const queryAbrir = `
+            INSERT INTO movimientos_caja (usuario_id, monto_inicial, fecha_apertura, estado)
+            VALUES ($1, $2, NOW(), 'abierta') RETURNING id;
+        `;
+        const resAbrir = await pool.query(queryAbrir, [idOperador, fondo]);
+        const nuevaCajaId = resAbrir.rows[0].id;
+
+        // 3. Registrar la apertura en la bitácora de Auditoría
+        const queryAuditoria = `
+            INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) 
+            VALUES ($1, $2, $3, NOW());
+        `;
+        const detalleAuditoria = `APERTURA DE CAJA EXITOSA (Corte #C-${nuevaCajaId}). Fondo Inicial inyectado: $${fondo.toFixed(2)}.`;
+        await pool.query(queryAuditoria, [idOperador, 'APERTURA_CAJA', detalleAuditoria]);
+
+        await pool.query('COMMIT');
+        res.status(201).json({ ok: true, message: "Caja abierta con éxito", caja_id: nuevaCajaId });
+
+    } catch (error) {
+        await pool.query('ROLLBACK');
+        console.error("Error crítico en la apertura de caja:", error);
+        res.status(500).json({ error: "No se pudo abrir la caja en el servidor." });
+    }
+});
 
 router.post('/asistencia', async (req, res) => {
     const { probador, detalle } = req.body;
