@@ -10,7 +10,10 @@ const AdminDashboard = () => {
     const [showNewPass, setShowNewPass] = useState(false);
     const [nuevoPassword, setNuevoPassword] = useState('');
     // Control de lienzo dinámico central
-    const [vistaActiva, setVistaActiva] = useState('bienvenida'); 
+    const [vistaActiva, setVistaActiva] = useState('bienvenida');
+    const [showTicketModal, setShowTicketModal] = useState(false);
+    const [detallesTicket, setDetallesTicket] = useState([]);
+    const [folioSeleccionado, setFolioSeleccionado] = useState('');
 
     // Formulario de Productos (Inserción rápida y extendida)
     const [nombre, setNombre] = useState('');
@@ -103,6 +106,22 @@ const AdminDashboard = () => {
 
         } catch (error) {
             console.error("Error de conectividad AWS RDS:", error);
+        }
+    };
+    const handleVerDetallesTicket = async (id) => {
+        try {
+            setFolioSeleccionado(id);
+            const res = await fetch(`http://34.219.103.28:3000/api/productos/ventas/detalles/${id}`, {
+                method: 'GET',
+                headers: getAuthHeaders()
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setDetallesTicket(data);
+                setShowTicketModal(true); // Abre el modal cuando los datos estén listos
+            }
+        } catch (error) {
+            console.error("Error cargando detalles del ticket:", error);
         }
     };
 
@@ -754,12 +773,13 @@ const AdminDashboard = () => {
                                             <th>Descuento</th>
                                             <th>Total Cobrado</th>
                                             <th>Fecha y Hora</th>
+                                            <th>Acciones</th> {/* 🟢 Agregado el encabezado */}
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {ventasData.length === 0 ? (
                                             <tr>
-                                                <td colSpan="6" className="text-muted py-3">No hay ventas registradas todavía.</td>
+                                                <td colSpan="7" className="text-muted py-3">No hay ventas registradas todavía.</td>
                                             </tr>
                                         ) : (
                                             ventasData.map((venta, i) => (
@@ -779,6 +799,17 @@ const AdminDashboard = () => {
                                                     </td>
                                                     <td className="text-muted">
                                                         {venta.fecha_venta ? new Date(venta.fecha_venta).toLocaleString('es-MX') : '---'}
+                                                    </td>
+                                                    {/* 🟢 NUEVA CELDA: Botón para abrir el desglose de artículos */}
+                                                    <td>
+                                                        <Button 
+                                                            variant="outline-secondary" 
+                                                            className="btn-sm py-0 px-2"
+                                                            style={{ fontSize: '0.72rem', height: '24px' }}
+                                                            onClick={() => handleVerDetallesTicket(venta.id)}
+                                                        >
+                                                            👁️ Ver Detalle
+                                                        </Button>
                                                     </td>
                                                 </tr>
                                             ))

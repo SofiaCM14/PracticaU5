@@ -307,5 +307,66 @@ router.post('/wishlist', async (req, res) => {
         res.status(201).json({ message: 'Prenda añadida a tus deseos ❤️' });
     } catch (error) { res.status(500).json({ error: 'Error al guardar en tu lista de deseos' }); }
 });
+// ====== RUTA: POST http://34.219.103.28:3000/api/productos/registrar-venta ======
+router.post('/registrar-venta', verificarToken, async (req, res) => {
+    const { total, descuento_aplicado, usuario_id, carrito } = req.body; 
+
+    try {
+        // 1. Iniciamos una transacción segura en PostgreSQL
+        await pool.query('BEGIN');
+
+        // 2. PASO 1: Insertar el encabezado en la tabla "ventas"
+        const queryVenta = `
+            INSERT INTO ventas (usuario_id, total, descuento_aplicado, fecha_venta) 
+            VALUES ($1, $2, $3, NOW()) RETURNING id;
+        `;
+        const resVenta = await pool.query(queryVenta, [usuario_id, total, descuento_aplicado]);
+        const nuevaVentaId = resVenta.rows[0].id; // Recuperamos el id automático generado
+
+        // 3. PASO 2: Recorrer el carrito e insertar cada prenda en "detalle_ventas"
+        const queryDetalle = `
+            INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario)
+            VALUES ($1, $2, $3, $4);
+        `;
+
+        for (const item of carrito) {
+            // Insertamos amarrando al ID de la venta que acabamos de crear
+            await pool.query(queryDetalle, [nuevaVentaId, item.producto_id, item.cantidad, item.precio_unitario]);
+            
+            // 🔥 Extra: Restamos las piezas del stock de la tabla productos
+            await pool.query(
+                'UPDATE productos SET stock = stock - $1 WHERE id = $2',
+                [item.cantidad, item.producto_id]
+            );
+        }
+
+        // Si todo se ejecutó sin errores, guardamos los cambios permanentemente
+        await pool.query('COMMIT');
+        res.status(201).json({ message: 'Venta procesada con éxito', venta_id: nuevaVentaId });
+
+    } catch (error) {
+        // Si algo truena, hacemos Rollback para dejar la base de datos intacta sin basura
+        await pool.query('ROLLBACK');
+        console.error("Error crítico en transacción de venta:", error);
+        res.status(500).json({ error: 'No se pudo registrar la venta ni sus detalles.' });
+    }
+});
+// ====== RUTA: GET http://34.219.103.28:3000/api/productos/ventas/detalles/:id ======
+router.get('/ventas/detalles/:id', verificarToken, async (req, res) => {
+    const { id } = req.params; // ID de la venta a consultar
+    try {
+        const query = `
+            SELECT dv.id, dv.cantidad, dv.precio_unitario, p.nombre AS nombre_prenda
+            FROM detalle_ventas dv
+            INNER JOIN productos p ON dv.producto_id = p.id
+            WHERE dv.venta_id = $1;
+        `;
+        const result = await pool.query(query, [id]);
+        res.json(result.rows);
+    } catch (error) {
+        console.error("Error al obtener detalles:", error);
+        res.status(500).json({ error: 'No se pudo obtener el desglose del ticket.' });
+    }
+});
 
 export default router;
