@@ -284,6 +284,79 @@ router.post('/caja', async (req, res) => {
         client.release();
     }
 });
+// 🔴 NUEVO: Endpoint para realizar el Cierre de Caja Automatizado
+router.post('/movimientos-caja/cerrar-caja', verificarToken, async (req, res) => {
+    const { usuario_id } = req.body;
+    const idOperador = usuario_id ? parseInt(usuario_id) : 1;
+
+    try {
+        await pool.query('BEGIN');
+
+        // Paso 1: Encontrar la caja abierta actual de ese usuario
+        const queryBuscarAbierta = `
+            SELECT id, fecha_apertura, monto_inicial 
+            FROM movimientos_caja 
+            WHERE usuario_id = $1 AND estado = 'abierta'
+            ORDER BY id DESC LIMIT 1;
+        `;
+        const resCaja = await pool.query(queryBuscarAbierta, [idOperador]);
+
+        if (resCaja.rows.length === 0) {
+            await pool.query('ROLLBACK');
+            return res.status(400).json({ error: "No se encontró ninguna caja abierta para este usuario." });
+        }
+
+        const cajaActiva = resCaja.rows[0];
+        const cajaId = cajaActiva.id;
+        const fechaApertura = cajaActiva.fecha_apertura;
+        const montoInicial = parseFloat(cajaActiva.monto_inicial);
+
+        // Paso 2: 🧮 Calcular la sumatoria de ventas acumuladas desde la apertura
+        const querySumarVentas = `
+            SELECT COALESCE(SUM(total), 0) AS total_ventas 
+            FROM ventas 
+            WHERE usuario_id = $1 AND fecha_venta >= $2;
+        `;
+        const resVentas = await pool.query(querySumarVentas, [idOperador, fechaApertura]);
+        const totalVentasTurno = parseFloat(resVentas.rows[0].total_ventas);
+
+        // El monto final real en efectivo es el fondo inicial + lo vendido en el día
+        const montoFinalCalculado = montoInicial + totalVentasTurno;
+
+        // Paso 3: Actualizar la tabla movimientos_caja con el cierre completo y estado 'cerrada'
+        const queryActualizarCaja = `
+            UPDATE movimientos_caja 
+            SET monto_final = $1, fecha_cierre = NOW(), estado = 'cerrada' 
+            WHERE id = $2;
+        `;
+        await pool.query(queryActualizarCaja, [montoFinalCalculado, cajaId]);
+
+        // Paso 4: Dejar evidencia transparente en la tabla de Auditoría
+        const queryAuditoria = `
+            INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) 
+            VALUES ($1, $2, $3, NOW());
+        `;
+        const detalleCierre = `CIERRE DE CAJA EXITOSO (Corte #C-${cajaId}). Fondo Inicial: $${montoInicial.toFixed(2)}. Ventas del turno: $${totalVentasTurno.toFixed(2)}. Monto Final Entregado: $${montoFinalCalculado.toFixed(2)}.`;
+        
+        await pool.query(queryAuditoria, [idOperador, 'CIERRE_CAJA', detalleCierre]);
+
+        await pool.query('COMMIT');
+        
+        // Retornamos el formato exacto que lee el Front (monto_final y ventas_del_dia)
+        res.status(200).json({ 
+            ok: true, 
+            message: "Caja cerrada correctamente", 
+            caja_id: cajaId,
+            ventas_del_dia: totalVentasTurno,
+            monto_final: montoFinalCalculado
+        });
+
+    } catch (error) {
+        await pool.query('ROLLBACK');
+        console.error("Error crítico procesando el arqueo de caja:", error);
+        res.status(500).json({ error: "No se pudo procesar el cierre de caja." });
+    }
+});
 
 router.post('/asistencia', async (req, res) => {
     const { probador, detalle } = req.body;

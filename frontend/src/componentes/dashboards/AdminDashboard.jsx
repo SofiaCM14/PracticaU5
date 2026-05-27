@@ -425,6 +425,78 @@ const AdminDashboard = () => {
             console.error("Error al actualizar usuario:", error);
         }
     };
+        const handleCerrarCaja = async () => {
+        if (!window.confirm("¿Estás segura de que deseas realizar el corte y cerrar la caja por hoy?")) return;
+
+        try {
+            const authHeaders = getAuthHeaders();
+            const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/cerrar-caja', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...authHeaders },
+                body: JSON.stringify({ usuario_id: 1 }) 
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                alert(`🔒 ¡Caja Cerrada Exitosamente!\n\n💰 Ventas del día: $${data.ventas_del_dia.toFixed(2)}\n💵 Total acumulado en Caja: $${data.monto_final.toFixed(2)}`);
+                cargarDatosAdmin(); // Actualiza la interfaz en tiempo real
+            } else {
+                alert(`⚠️ Error: ${data.error}`);
+            }
+        } catch (error) {
+            console.error("Error al conectar el cierre:", error);
+            alert("❌ Error de comunicación con el servidor.");
+        }
+    };
+
+    const handleImprimirTicketCorte = (datosCaja) => {
+        const ventanaImpresion = window.open('', '_blank', 'width=400,height=600');
+        const fondoInicial = parseFloat(datosCaja.monto_inicial) || 0;
+        const montoFinal = parseFloat(datosCaja.monto_final) || 0;
+        const totalVentas = montoFinal > 0 ? (montoFinal - fondoInicial) : 0;
+
+        ventanaImpresion.document.write(`
+            <html>
+            <head>
+                <title>Ticket de Corte de Caja</title>
+                <style>
+                    body { font-family: 'Courier New', Courier, monospace; width: 280px; margin: 0 auto; padding: 10px; font-size: 12px; color: #000; }
+                    .text-center { text-align: center; }
+                    .fw-bold { font-weight: bold; }
+                    .linea-divisoria { border-top: 1px dashed #000; margin: 8px 0; }
+                    .flex-justify { display: flex; justify-content: space-between; }
+                    .grand-total { font-size: 14px; font-weight: bold; margin-top: 5px; }
+                </style>
+            </head>
+            <body>
+                <div class="text-center">
+                    <h3 style="margin:0; text-transform: uppercase;">✨ SmartBoutique ✨</h3>
+                    <p style="margin:2px 0;">SISTEMA DE AUDITORÍA CLOUD</p>
+                </div>
+                <div class="linea-divisoria"></div>
+                <div class="text-center fw-bold">📜 TICKET DE CORTE DE CAJA 📜</div>
+                <div style="margin-top: 6px;">
+                    <div><b>Corte Folio:</b> #C-${datosCaja.id}</div>
+                    <div><b>Operador ID:</b> ${datosCaja.usuario_id}</div>
+                    <div><b>Estado:</b> ${datosCaja.estado.toUpperCase()}</div>
+                </div>
+                <div class="linea-divisoria"></div>
+                <div><b>Apertura:</b><br/> ${datosCaja.fecha_apertura ? new Date(datosCaja.fecha_apertura).toLocaleString('es-MX') : '---'}</div>
+                <div style="margin-top: 4px;"><b>Cierre:</b><br/> ${datosCaja.fecha_cierre ? new Date(datosCaja.fecha_cierre).toLocaleString('es-MX') : '---'}</div>
+                <div class="linea-divisoria"></div>
+                <div class="flex-justify"><span>(+) FONDO INICIAL:</span><span>$${fondoInicial.toFixed(2)}</span></div>
+                <div class="flex-justify"><span>(+) VENTAS TURNO:</span><span>$${totalVentas.toFixed(2)}</span></div>
+                <div class="linea-divisoria"></div>
+                <div class="flex-justify grand-total"><span>(=) TOTAL EN CAJA:</span><span>$${montoFinal > 0 ? montoFinal.toFixed(2) : fondoInicial.toFixed(2)}</span></div>
+                <div class="linea-divisoria" style="border-top: 1px double #000;"></div>
+                <div class="text-center" style="margin-top: 15px; font-size: 10px;">Arqueo guardado en AWS RDS.<br/><br/><b>Firmado por Gerencia.</b></div>
+                <script>window.onload = function() { window.print(); window.close(); };</script>
+            </body>
+            </html>
+        `);
+        ventanaImpresion.document.close();
+    };
     const handleDeleteUser = async (id) => {
     try {
         const res = await fetch(`http://34.219.103.28:3000/api/productos/usuarios/${id}`, {
@@ -1114,50 +1186,124 @@ const AdminDashboard = () => {
                         </Modal.Body>
                     </Modal>
                     {/* ==================== MÓDULO DE MOVIMIENTOS DE CAJA COMPLETO ==================== */}
-                    {vistaActiva === 'caja' && (
-                        <div className="animate__animated animate__fadeIn">
-                            <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>💵 Historial de Aperturas y Cierres de Caja</h5>
-                            
-                            <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
-                                <thead className="table-light">
-                                    <tr>
-                                        <th>ID Corte</th>
-                                        <th>Operador (ID)</th>
-                                        <th>F. Apertura</th>
-                                        <th>Monto Inicial</th>
-                                        <th>F. Cierre</th>
-                                        <th>Monto Final</th>
-                                        <th>Estado de Caja</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {movimientosCajaData.length === 0 ? (
-                                        <tr>
-                                            <td colSpan="7" className="text-muted py-3">No hay registros de caja creados todavía. (0 rows)</td>
-                                        </tr>
-                                    ) : (
-                                        movimientosCajaData.map((caja, i) => (
-                                            <tr key={i} className="border-bottom">
-                                                <td className="fw-bold text-secondary">#C-{caja.id}</td>
-                                                <td><Badge bg="dark">ID: {caja.usuario_id}</Badge></td>
-                                                <td className="text-muted">{caja.fecha_apertura ? new Date(caja.fecha_apertura).toLocaleString('es-MX') : '---'}</td>
-                                                <td className="fw-bold text-primary">${parseFloat(caja.monto_inicial).toFixed(2)}</td>
-                                                <td className="text-muted">{caja.fecha_cierre ? new Date(caja.fecha_cierre).toLocaleString('es-MX') : '---'}</td>
-                                                <td className="fw-bold text-success">
-                                                    {caja.monto_final ? `$${parseFloat(caja.monto_final).toFixed(2)}` : '---'}
-                                                </td>
-                                                <td>
-                                                    <Badge bg={caja.estado === 'abierta' ? 'success' : 'secondary'}>
-                                                        {caja.estado.toUpperCase()}
-                                                    </Badge>
-                                                </td>
+                        {vistaActiva === 'caja' && (
+                            <div className="animate__animated animate__fadeIn p-2">
+                                <h5 className="fw-bold mb-4 small" style={{ color: '#ad1457' }}>
+                                    💵 Panel de Control Financiero y Arqueos de Turno
+                                </h5>
+
+                                {/* 🎛️ SECCIÓN DE TRES BOTONES / TARJETAS GRANDES EN EL CENTRO */}
+                                <div className="row g-3 justify-content-center text-center mb-5">
+                                    
+                                    {/* Tarjeta 1: Fondo de Apertura */}
+                                    <div className="col-12 col-md-3">
+                                        <div className="p-3 shadow-sm rounded-4 border-0 h-100 bg-white d-flex flex-column justify-content-center align-items-center">
+                                            <span className="text-muted small fw-bold text-uppercase tracking-wider">Fondo de Apertura</span>
+                                            <h2 className="fw-black my-2" style={{ color: '#0288d1' }}>
+                                                ${movimientosCajaData[0]?.estado === 'abierta' ? parseFloat(movimientosCajaData[0].monto_inicial).toFixed(2) : '0.00'}
+                                            </h2>
+                                            <Badge bg={movimientosCajaData[0]?.estado === 'abierta' ? 'success' : 'secondary'} className="px-2 py-1">
+                                                {movimientosCajaData[0]?.estado === 'abierta' ? 'Caja Activa' : 'Caja Cerrada'}
+                                            </Badge>
+                                        </div>
+                                    </div>
+
+                                    {/* Tarjeta 2: BOTÓN CENTRAL DE CIERRE (Maneja el estado 'cerrada') */}
+                                    <div className="col-12 col-md-4">
+                                        <button 
+                                            onClick={handleCerrarCaja}
+                                            disabled={movimientosCajaData[0]?.estado !== 'abierta'}
+                                            className="w-100 p-4 shadow border-0 rounded-4 text-white btn-danger position-relative overflow-hidden h-100 d-flex flex-column justify-content-center align-items-center"
+                                            style={{ 
+                                                background: movimientosCajaData[0]?.estado === 'abierta' ? 'linear-gradient(135deg, #d32f2f, #c2185b)' : '#b0bec5',
+                                                transition: 'transform 0.2s, box-shadow 0.2s',
+                                                cursor: movimientosCajaData[0]?.estado === 'abierta' ? 'pointer' : 'not-allowed'
+                                            }}
+                                            onMouseEnter={(e) => movimientosCajaData[0]?.estado === 'abierta' && (e.currentTarget.style.transform = 'scale(1.02)')}
+                                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                        >
+                                            <div className="fs-1 mb-1">
+                                                {movimientosCajaData[0]?.estado === 'abierta' ? '🔓' : '🔒'}
+                                            </div>
+                                            <span className="fw-bold text-uppercase tracking-wide small text-white-50">Acción de Arqueo</span>
+                                            <h4 className="fw-black m-0 mt-1">
+                                                {movimientosCajaData[0]?.estado === 'abierta' ? 'Realizar Corte de Caja' : 'Corte Procesado'}
+                                            </h4>
+                                            <small className="text-white-50 mt-2">
+                                                {movimientosCajaData[0]?.estado === 'abierta' ? 'Suma las ventas y cierra el turno' : 'Turno finalizado en la BD'}
+                                            </small>
+                                        </button>
+                                    </div>
+
+                                    {/* Tarjeta 3: Total Vendido + Historial Imprimible */}
+                                    <div className="col-12 col-md-3">
+                                        <button 
+                                            onClick={() => {
+                                                if(movimientosCajaData.length > 0) {
+                                                    handleImprimirTicketCorte(movimientosCajaData[0]);
+                                                } else {
+                                                    alert("No hay ningún corte registrado.");
+                                                }
+                                            }}
+                                            className="w-100 p-3 shadow-sm border-0 rounded-4 bg-white h-100 d-flex flex-column justify-content-center align-items-center"
+                                            style={{ transition: 'transform 0.2s' }}
+                                            onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
+                                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                        >
+                                            <span className="text-muted small fw-bold text-uppercase tracking-wider">Total Vendido Hoy</span>
+                                            <h2 className="fw-black my-2" style={{ color: '#2e7d32' }}>
+                                                ${
+                                                    movimientosCajaData[0]
+                                                    ? (parseFloat(movimientosCajaData[0].monto_final || movimientosCajaData[0].monto_inicial) - parseFloat(movimientosCajaData[0].monto_inicial)).toFixed(2)
+                                                    : '0.00'
+                                                }
+                                            </h2>
+                                            <span className="badge bg-dark rounded-pill py-1 px-2 text-uppercase font-monospace small">
+                                                📄 Ver Ticket de Corte
+                                            </span>
+                                        </button>
+                                    </div>
+
+                                </div>
+
+                                {/* 📊 TABLA HISTÓRICA */}
+                                <div className="bg-white rounded-4 p-3 shadow-sm">
+                                    <h6 className="fw-bold text-secondary mb-3 small">📋 Historial General de Movimientos</h6>
+                                    <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
+                                        <thead className="table-light">
+                                            <tr>
+                                                <th>ID Corte</th>
+                                                <th>Operador</th>
+                                                <th>F. Apertura</th>
+                                                <th>Monto Inicial</th>
+                                                <th>F. Cierre</th>
+                                                <th>Monto Final</th>
+                                                <th>Estado</th>
                                             </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </Table>
-                        </div>
-                    )}
+                                        </thead>
+                                        <tbody>
+                                            {movimientosCajaData.map((caja, i) => (
+                                                <tr key={i} className="border-bottom">
+                                                    <td className="fw-bold text-secondary">#C-{caja.id}</td>
+                                                    <td><Badge bg="dark">ID: {caja.usuario_id}</Badge></td>
+                                                    <td className="text-muted">{caja.fecha_apertura ? new Date(caja.fecha_apertura).toLocaleString('es-MX') : '---'}</td>
+                                                    <td className="fw-bold text-primary">${parseFloat(caja.monto_inicial).toFixed(2)}</td>
+                                                    <td className="text-muted">{caja.fecha_cierre ? new Date(caja.fecha_cierre).toLocaleString('es-MX') : '---'}</td>
+                                                    <td className="fw-bold text-success">
+                                                        {caja.monto_final ? `$${parseFloat(caja.monto_final).toFixed(2)}` : '---'}
+                                                    </td>
+                                                    <td>
+                                                        <Badge bg={caja.estado === 'abierta' ? 'success' : 'secondary'}>
+                                                            {caja.estado.toUpperCase()}
+                                                        </Badge>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </Table>
+                                </div>
+                            </div>
+                        )}
                        
                         {vistaActiva === 'devoluciones' && (
                             <div className="animate__animated animate__fadeIn">
