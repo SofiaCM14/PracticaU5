@@ -14,6 +14,10 @@ const AdminDashboard = () => {
     const [showTicketModal, setShowTicketModal] = useState(false);
     const [detallesTicket, setDetallesTicket] = useState([]);
     const [folioSeleccionado, setFolioSeleccionado] = useState('');
+    // ====== ESTADOS PARA EL MÓDULO DE VENTAS ======
+    const [idProductoVenta, setIdProductoVenta] = useState('');
+    const [cantidadVenta, setCantidadVenta] = useState('');
+    const [carrito, setCarrito] = useState([]); // <── Aquí guardamos las prendas antes de cobrar
 
     // Formulario de Productos (Inserción rápida y extendida)
     const [nombre, setNombre] = useState('');
@@ -117,11 +121,76 @@ const AdminDashboard = () => {
             });
             if (res.ok) {
                 const data = await res.json();
-                setDetallesTicket(data);
-                setShowTicketModal(true); // Abre el modal cuando los datos estén listos
+                setDetallesTicket(data); // Guarda los Jeans Mom en el estado
+                setShowTicketModal(true); // ──> 🟢 ¡Abre tu nuevo modal tipo ticket aquí!
             }
         } catch (error) {
-            console.error("Error cargando detalles del ticket:", error);
+            console.error("Error cargando detalles:", error);
+        }
+    };
+        // 1. Agregar un artículo al carrito temporal
+    const handleAgregarAlCarrito = (e) => {
+        e.preventDefault();
+        
+        // Buscamos si el producto existe en tu lista local de prendas para jalar su nombre y precio
+        const productoExiste = prendasData.find(p => p.id === parseInt(idProductoVenta));
+        
+        if (!productoExiste) {
+            alert("⚠️ El ID del producto no existe en el catálogo.");
+            return;
+        }
+        
+        if (parseInt(cantidadVenta) > productoExiste.stock) {
+            alert(`⚠️ Stock insuficiente. Solo quedan ${productoExiste.stock} pz.`);
+            return;
+        }
+
+        const nuevoItem = {
+            producto_id: productoExiste.id,
+            nombre_prenda: productoExiste.nombre, // o productoExiste.nombre_prenda según tu objeto
+            cantidad: parseInt(cantidadVenta),
+            precio_unitario: parseFloat(productoExiste.precio)
+        };
+
+        setCarrito([...carrito, nuevoItem]);
+        setIdProductoVenta('');
+        setCantidadVenta('');
+    };
+
+    // 2. Enviar el carrito completo al Backend de AWS
+    const handleProcesarVenta = async () => {
+        if (carrito.length === 0) return;
+
+        // Calculamos el total sumando los subtotales del carrito
+        const totalVenta = carrito.reduce((acc, item) => acc + (item.cantidad * item.precio_unitario), 0);
+
+        try {
+            const res = await fetch('http://34.219.103.28:3000/api/productos/registrar-venta', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getAuthHeaders()
+                },
+                body: JSON.stringify({
+                    total: totalVenta,
+                    descuento_aplicado: 0.00,
+                    usuario_id: 1, // Aquí puedes usar el ID de tu sesión activa 'admin_sofi'
+                    carrito: carrito // Envíal el array completo
+                })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setCarrito([]); // Limpiamos la caja registradora
+                cargarDatosAdmin(); // ──> 🟢 Recarga la tabla para ver el nuevo folio instantáneamente
+                
+                // Opcional: Jalamos los detalles para mostrar de inmediato el ticket bonito en pantalla
+                handleVerDetallesTicket(data.venta_id);
+            } else {
+                alert("Error al procesar la venta.");
+            }
+        } catch (error) {
+            console.error("Error en el punto de venta:", error);
         }
     };
 
@@ -761,9 +830,93 @@ const AdminDashboard = () => {
                             </div>
                         )}
                         {/* ====== AGREGA ESTA VISTA EN AdminDashboard.jsx ====== */}
+                        {/* ==================== MÓDULO DE VENTAS COMPLETO ==================== */}
                         {vistaActiva === 'ventas' && (
                             <div className="animate__animated animate__fadeIn">
-                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>💰 Historial de Ventas.</h5>
+                                
+                                {/* 🛒 SECCIÓN 1: CAJA REGISTRADORA / PUNTO DE VENTA */}
+                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>🛒 Nueva Venta (Punto de Venta)</h5>
+                                <Row className="g-3 mb-4">
+                                    {/* Formulario de entrada */}
+                                    <Col md={4}>
+                                        <Form onSubmit={handleAgregarAlCarrito} className="p-3 bg-light rounded border m-0 row g-2">
+                                            <Col xs={12}>
+                                                <Form.Control 
+                                                    type="number" 
+                                                    placeholder="ID del Producto (Ej: 3)" 
+                                                    value={idProductoVenta} 
+                                                    onChange={e => setIdProductoVenta(e.target.value)} 
+                                                    size="sm" 
+                                                    required 
+                                                />
+                                            </Col>
+                                            <Col xs={12}>
+                                                <Form.Control 
+                                                    type="number" 
+                                                    placeholder="Cantidad a vender" 
+                                                    value={cantidadVenta} 
+                                                    onChange={e => setCantidadVenta(e.target.value)} 
+                                                    size="sm" 
+                                                    required 
+                                                />
+                                            </Col>
+                                            <Col xs={12}>
+                                                <Button type="submit" variant="success" className="btn-sm w-100">
+                                                    ➕ Añadir al Carrito
+                                                </Button>
+                                            </Col>
+                                        </Form>
+                                    </Col>
+
+                                    {/* Monitor del Carrito Actual */}
+                                    <Col md={8}>
+                                        <div className="p-3 bg-white rounded border h-100 d-flex flex-column justify-content-between">
+                                            <div>
+                                                <h6 className="fw-bold small text-muted border-bottom pb-1 mb-2">Prendas en el Carrito:</h6>
+                                                {carrito.length === 0 ? (
+                                                    <p className="text-muted small text-center my-3">El carrito está vacío.</p>
+                                                ) : (
+                                                    <Table size="sm" className="small text-center align-middle mb-0">
+                                                        <thead>
+                                                            <tr>
+                                                                <th className="text-start">ID - Prenda</th>
+                                                                <th>Cant.</th>
+                                                                <th>Precio</th>
+                                                                <th className="text-end">Subtotal</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {carrito.map((item, idx) => (
+                                                                <tr key={idx}>
+                                                                    <td className="text-start">#{item.producto_id} - {item.nombre_prenda}</td>
+                                                                    <td>{item.cantidad}</td>
+                                                                    <td>${item.precio_unitario.toFixed(2)}</td>
+                                                                    <td className="text-end fw-bold">${(item.cantidad * item.precio_unitario).toFixed(2)}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </Table>
+                                                )}
+                                            </div>
+                                            {/* Botón de acción para registrar en AWS */}
+                                            {carrito.length > 0 && (
+                                                <div className="d-flex justify-content-between align-items-center border-top pt-2 mt-2">
+                                                    <span className="fw-bold text-dark small">
+                                                        TOTAL: ${carrito.reduce((acc, item) => acc + (item.cantidad * item.precio_unitario), 0).toFixed(2)}
+                                                    </span>
+                                                    <Button variant="danger" size="sm" className="px-4" onClick={handleProcesarVenta}>
+                                                        💰 Concluir y Cobrar Venta
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </Col>
+                                </Row>
+
+                                <hr className="my-4 text-muted" />
+
+                                {/* 📊 SECCIÓN 2: HISTORIAL DE FOLIOS COBRADOS */}
+                                <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>💰 Historial de Ventas Ejecutadas</h5>
                                 <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
                                     <thead className="table-light">
                                         <tr>
@@ -773,7 +926,7 @@ const AdminDashboard = () => {
                                             <th>Descuento</th>
                                             <th>Total Cobrado</th>
                                             <th>Fecha y Hora</th>
-                                            <th>Acciones</th> {/* 🟢 Agregado el encabezado */}
+                                            <th>Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -800,7 +953,6 @@ const AdminDashboard = () => {
                                                     <td className="text-muted">
                                                         {venta.fecha_venta ? new Date(venta.fecha_venta).toLocaleString('es-MX') : '---'}
                                                     </td>
-                                                    {/* 🟢 NUEVA CELDA: Botón para abrir el desglose de artículos */}
                                                     <td>
                                                         <Button 
                                                             variant="outline-secondary" 
@@ -818,6 +970,69 @@ const AdminDashboard = () => {
                                 </Table>
                             </div>
                         )}
+                        {/* ====== MODAL INTERACTIVO: DESGLOSE DE TICKET ESTILO SMARTBOUTIQUE ====== */}
+                        <Modal show={showTicketModal} onHide={() => setShowTicketModal(false)} centered size="sm">
+                            <Modal.Body className="p-4" style={{ fontFamily: 'Courier New, Courier, monospace', backgroundColor: '#ffffff' }}>
+                                
+                                {/* Encabezado del Ticket */}
+                                <div className="text-center mb-3">
+                                    <h5 className="fw-bold m-0" style={{ color: '#ad1457', letterSpacing: '1px' }}>✨ SMART BOUTIQUE ✨</h5>
+                                    <small className="text-muted d-block" style={{ fontSize: '0.75rem' }}>Instituto Tecnológico Superior de Apatzingán</small>
+                                    <small className="text-muted d-block" style={{ fontSize: '0.7rem' }}>Soporte de Sistemas</small>
+                                    <div className="my-2" style={{ borderTop: '1px dashed #ced4da' }}></div>
+                                    <span className="fw-bold d-block small">COMPROBANTE DE VENTA</span>
+                                    <span className="text-secondary small">Folio: #V-{folioSeleccionado}</span>
+                                </div>
+
+                                {/* Cuerpo del Desglose */}
+                                <div className="mb-3">
+                                    <div className="d-flex justify-content-between fw-bold text-secondary" style={{ fontSize: '0.75rem' }}>
+                                        <span>DESCRIPCIÓN</span>
+                                        <span>CANT x PRECIO</span>
+                                    </div>
+                                    <div className="my-1" style={{ borderTop: '1px dashed #ced4da' }}></div>
+
+                                    {/* Mapeo dinámico de los artículos que vienen desde AWS */}
+                                    {detallesTicket.map((item, i) => (
+                                        <div key={i} className="mb-2" style={{ fontSize: '0.75rem', lineHeight: '1.2' }}>
+                                            <div className="fw-bold text-dark text-uppercase">{item.nombre_prenda}</div>
+                                            <div className="d-flex justify-content-between text-muted ps-2">
+                                                <span>{item.cantidad} pza(s) x ${parseFloat(item.precio_unitario).toFixed(2)}</span>
+                                                <span className="fw-bold text-dark">
+                                                    ${(item.cantidad * parseFloat(item.precio_unitario)).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Totales del Ticket */}
+                                <div className="my-2" style={{ borderTop: '1px dashed #ced4da' }}></div>
+                                <div className="d-flex justify-content-between fw-bold mb-3" style={{ fontSize: '0.85rem' }}>
+                                    <span>TOTAL COBRADO:</span>
+                                    <span className="text-success">
+                                        ${detallesTicket.reduce((acc, item) => acc + (item.cantidad * parseFloat(item.precio_unitario)), 0).toFixed(2)}
+                                    </span>
+                                </div>
+
+                                {/* Pie de Ticket */}
+                                <div className="text-center mt-4">
+                                    <p className="m-0 small fw-bold text-muted" style={{ fontSize: '0.7rem' }}>¡Gracias por tu compra! 👑</p>
+                                    <small className="text-muted" style={{ fontSize: '0.6rem' }}>SmartBoutique POS v5.0 - Cloud Infrastructure</small>
+                                    
+                                    <Button 
+                                        variant="dark" 
+                                        size="sm" 
+                                        className="w-100 mt-3 btn-sm border-0" 
+                                        style={{ backgroundColor: '#ad1457', fontSize: '0.75rem' }}
+                                        onClick={() => setShowTicketModal(false)}
+                                    >
+                                        Cerrar Ticket
+                                    </Button>
+                                </div>
+
+                            </Modal.Body>
+                        </Modal>
                         {vistaActiva === 'devoluciones' && (
                             <div className="animate__animated animate__fadeIn">
                                 <h5 className="fw-bold mb-3 small" style={{ color: '#ad1457' }}>↩️ Control de Devoluciones</h5>
