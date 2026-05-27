@@ -313,7 +313,7 @@ router.post('/registrar-venta', verificarToken, async (req, res) => {
     const { total, descuento_aplicado, usuario_id, carrito, descuento_id } = req.body; 
 
     // Blindaje por si usuario_id viene indefinido o nulo, le asignamos el ID 1 (admin_sofi)
-    const idOperador = usuario_id ? parseInt(req.usuario.id) : 1;
+    const idOperador = usuario_id ? parseInt(usuario_id) : 1;
     // Si no mandan el descuento_id en la petición, por defecto se amarra al ID 1 (Sin Descuento)
     const idDescuento = descuento_id ? parseInt(descuento_id) : 1;
 
