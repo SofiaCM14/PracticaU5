@@ -58,6 +58,7 @@ const ClienteDashboard = () => {
         const payload = {
             probador_id: probadorSeleccionado,
             nota: notaAsistencia,
+            estado: 'pendiente',
             usuario_id: usuarioIdReal
         };
 
@@ -317,15 +318,15 @@ const ClienteDashboard = () => {
                                         <tr><th>Cabina</th><th>Mensaje Enviado</th><th>Estado del Asesor</th></tr>
                                     </thead>
                                     <tbody>
-                                        {asistencias.filter(as => as.usuario_id === usuarioIdReal).length === 0 ? (
+                                        {asistencias.length === 0 ? (
                                             <tr>
                                                 <td colSpan="3" className="text-muted py-3">No has realizado llamadas de asistencia en este turno de probadores.</td>
                                             </tr>
                                         ) : (
-                                            asistencias.filter(as => as.usuario_id === usuarioIdReal).map((as, idx) => (
+                                            /* 🔔 Cambiado de asistencias.filter(...).map a asistencias.map directo */
+                                            asistencias.map((as, idx) => (
                                                 <tr key={idx}>
                                                     <td className="fw-bold text-danger">{as.probador_id}</td>
-                                                    {/* 🎯 Mapeo directo del mensaje de la alerta */}
                                                     <td className="text-start text-muted">{as.nota || 'Solicitó un asesor de piso.'}</td>
                                                     <td>
                                                         {as.estado === 'pendiente' && (
@@ -342,6 +343,7 @@ const ClienteDashboard = () => {
                                             ))
                                         )}
                                     </tbody>
+                                    
                                 </Table>
                             </div>
                         </Col>

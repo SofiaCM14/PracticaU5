@@ -572,10 +572,10 @@ router.post('/asistencia', async (req, res) => {
     try {
         // Usamos los nombres reales de tus columnas: probador_id, estado y fecha_solicitud
         const queryInsert = `
-            INSERT INTO asistencia_probadores (probador_id, estado, atendido_por, fecha_solicitud, nota) 
-            VALUES ($1, 'pendiente', NULL, NOW(), $2);
+            INSERT INTO asistencia_probadores (probador_id, estado, atendido_por, fecha_solicitud, nota, usuario_id) 
+            VALUES ($1, 'pendiente', NULL, NOW(), $2, $3);
         `;
-        await pool.query(queryInsert, [probador_id, nota]);
+        await pool.query(queryInsert, [probador_id, nota, usuario_id]);
         
         res.status(201).json({ message: 'Asistencia solicitada con éxito.' });
     } catch (error) { 
