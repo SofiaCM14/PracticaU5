@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Table, Badge, Form, Alert, Button, Card, Modal, InputGroup } from 'react-bootstrap';
 import Swal from 'sweetalert2';
+import { useNavigate } from 'react-router-dom';
 
 const AdminDashboard = () => {
+    const navigate = useNavigate();
+    
     const [recentActivity, setRecentActivity] = useState([]);
     const [listaUsuarios, setListaUsuarios] = useState([]);
     const [productos, setProductos] = useState([]);
@@ -59,7 +62,15 @@ const AdminDashboard = () => {
 
     const usuarioActivo = localStorage.getItem('username') || 'admin_sofi';
     const rolActivo = localStorage.getItem('userRole') || 'admin';
-    
+
+    const handleLogout = () => {
+        try {
+            localStorage.clear();
+            navigate('/');
+        } catch (error) {
+            console.error('Error al cerrar sesión local:', error);
+        }
+    };
     const getAuthHeaders = () => {
         const token = localStorage.getItem('token');
         if (!token) return {};
@@ -562,75 +573,64 @@ const AdminDashboard = () => {
 
     const styles = {
         mainContainer: { borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' },
-        headerSection: { background: 'linear-gradient(135deg, #ad1457 0%, #c2185b 100%)', padding: '26px', margin: '0', border: 'none' },
+        headerSection: { background: 'linear-gradient(135deg, #c2185b 0%, #ad1457 100%)', padding: '26px', margin: '0', border: 'none' },
         sidebar: { backgroundColor: '#fce4ec', padding: '20px 15px', minHeight: '65vh', height: '100%', border: 'none' },
         contentArea: { backgroundColor: '#ffffff', padding: '35px', minHeight: '65vh', height: '100%', border: 'none' },
         menuBtn: { fontSize: '1.15rem', textAlign: 'left', fontWeight: 'bold', marginBottom: '6px', borderRadius: '8px', padding: '12px 14px', border: 'none', display: 'block', width: '100%' },
-        footer: { padding: '15px', marginTop: '20px', borderTop: '1px solid #f8bbd0' },
+        footer: { background: 'linear-gradient(135deg, #c2185b 0%, #ad1457 100%)', color: '#ffffff', padding: '18px 24px', marginTop: '20px', textAlign: 'center' },
         cardBoutique: { border: '1px solid #f8bbd0', borderRadius: '14px', overflow: 'hidden', transition: 'all 0.2s' }
     };
 
     return (
-        <div className="w-100 px-1" style={styles.mainContainer}>
+        <div className="dashboard-responsive w-100 px-7" style={styles.mainContainer}>
+
             {/* ==================== 1. BANNER DE BIENVENIDA (HEADER) ==================== */}
             <header style={styles.headerSection}>
-                <Row className="text-center align-items-center m-0 w-100">
-                    <Col className="p-0">
-                        <h1 className="fw-bold m-0 text-white" style={{ fontSize: '2.1rem', letterSpacing: '0.5px' }}>
-                            Bienvenida a tu panel de Gerencia y administración, {usuarioActivo} 👑
-                        </h1>
+                <Row className="align-items-center m-0 w-100 flex-column flex-md-row">
+                    <Col className="p-0 text-center text-md-start">
+                        <h2 className="fw-bold m-0 text-white" style={{ fontSize: '2.1rem', letterSpacing: '0.5px' }}>
+                            Gerencia y administración, {usuarioActivo} 👑
+                        </h2>
+                    </Col>
+                    <Col className="p-0 text-center text-md-end mt-3 mt-md-0" style={{ minWidth: '180px' }}>
+                        <Button 
+                            variant="light" 
+                            onClick={handleLogout}
+                            style={{ 
+                                borderRadius: '20px', 
+                                padding: '8px 20px',
+                                paddingTop: '6px', 
+                                fontSize: '1.2rem', // 💡 Nota: 2.1rem lo hace del tamaño del título. Si quieres forzar los 2.1rem cámbialo aquí.
+                                fontWeight: 'bold',
+                                color: '#ad1457' // Hace juego con el fondo guinda
+                            }}
+                        >
+                            Cerrar Sesión
+                        </Button>
                     </Col>
                 </Row>
             </header>
 
-            <nav className="d-flex justify-content-center align-items-center gap-3 my-3 p-2 bg-light rounded shadow-sm mx-auto" style={{ maxWidth: '95%' }}>                
-                <button 
-                    style={{ ...styles.menuBtn, width: 'auto', padding: '10px 22px', margin: 0, backgroundColor: vistaActiva === 'inventario' ? '#ad1457' : '#fff', color: vistaActiva === 'inventario' ? '#ffffff' : '#ad1457' }} 
-                    onClick={() => { setVistaActiva('inventario'); cargarDatosAdmin(); }}
-                >
+            <nav className="dashboard-menu" style={{ maxWidth: '100%', margin: 0 }}>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'inventario' ? 'active' : ''}`} onClick={() => { setVistaActiva('inventario'); cargarDatosAdmin(); }}>
                     👗 Prendas
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, width: 'auto', padding: '10px 22px', margin: 0, backgroundColor: vistaActiva === 'mercancia' ? '#ad1457' : '#fff', color: vistaActiva === 'mercancia' ? '#fff' : '#ad1457' }} 
-                    onClick={() => { setVistaActiva('mercancia'); cargarDatosAdmin(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'mercancia' ? 'active' : ''}`} onClick={() => { setVistaActiva('mercancia'); cargarDatosAdmin(); }}>
                     🚛 Recepción de Mercancía
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, width: 'auto', padding: '10px 22px', margin: 0, backgroundColor: vistaActiva === 'usuarios' ? '#ad1457' : '#fff', color: vistaActiva === 'usuarios' ? '#fff' : '#ad1457' }} 
-                    onClick={() => { setVistaActiva('usuarios'); cargarDatosAdmin(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'usuarios' ? 'active' : ''}`} onClick={() => { setVistaActiva('usuarios'); cargarDatosAdmin(); }}>
                     👥 Empleados
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, width: 'auto', padding: '10px 22px', margin: 0, backgroundColor: vistaActiva === 'auditoria' ? '#ad1457' : '#fff', color: vistaActiva === 'auditoria' ? '#fff' : '#ad1457' }} 
-                    onClick={() => { setVistaActiva('auditoria'); cargarDatosAdmin(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'auditoria' ? 'active' : ''}`} onClick={() => { setVistaActiva('auditoria'); cargarDatosAdmin(); }}>
                     📡 Movimientos
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, width: 'auto', padding: '10px 22px', margin: 0, backgroundColor: vistaActiva === 'devoluciones' ? '#ad1457' : '#fff', color: vistaActiva === 'devoluciones' ? '#fff' : '#ad1457' }} 
-                    onClick={() => { setVistaActiva('devoluciones'); cargarDatosAdmin(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'devoluciones' ? 'active' : ''}`} onClick={() => { setVistaActiva('devoluciones'); cargarDatosAdmin(); }}>
                     ↩️ Devoluciones
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, width: 'auto', padding: '10px 22px', margin: 0, backgroundColor: vistaActiva === 'ventas' ? '#ad1457' : '#fff', color: vistaActiva === 'ventas' ? '#fff' : '#ad1457' }} 
-                    onClick={() => { setVistaActiva('ventas'); cargarDatosAdmin(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'ventas' ? 'active' : ''}`} onClick={() => { setVistaActiva('ventas'); cargarDatosAdmin(); }}>
                     🛍️ Ventas
                 </button>
-                <button 
-                    style={{ 
-                        ...styles.menuBtn, 
-                        width: 'auto', 
-                        padding: '10px 22px', 
-                        margin: 0, 
-                        backgroundColor: vistaActiva === 'caja' ? '#ad1457' : '#fff', 
-                        color: vistaActiva === 'caja' ? '#fff' : '#ad1457' 
-                    }} 
-                    onClick={() => { setVistaActiva('caja'); cargarDatosAdmin(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'caja' ? 'active' : ''}`} onClick={() => { setVistaActiva('caja'); cargarDatosAdmin(); }}>
                     💵 Control de Caja
                 </button>
             </nav>
@@ -1288,6 +1288,11 @@ const AdminDashboard = () => {
                     </Form>
                 </Modal.Body>
             </Modal>
+            <footer className="dashboard-footer">
+                <div className="dashboard-footer-title">© 2026 SmartBoutique</div>
+                <div className="dashboard-footer-subtitle">Panel administrativo premium • Gestión integral</div>
+                <div className="dashboard-footer-legal">Infraestructura Global Conectada a AWS RDS Postgres v15 • Sistema en Línea Activo</div>
+            </footer>
         </div>
     );
 };

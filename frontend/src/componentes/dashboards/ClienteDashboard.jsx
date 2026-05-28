@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Table, Badge, Form, Alert, Button, Card, Modal, InputGroup } from 'react-bootstrap';
 import Swal from 'sweetalert2';
+import { useNavigate } from 'react-router-dom';
 
 const ClienteDashboard = () => {
     const [productos, setProductos] = useState([]);
     const [carritoDeseos, setCarritoDeseos] = useState([]);
     const [asistencias, setAsistencias] = useState([]);
+    const [carritoVisible, setCarritoVisible] = useState(false);
     
     // Control de lienzo central dinámico
     const [vistaActiva, setVistaActiva] = useState('bienvenida');
@@ -20,6 +22,15 @@ const ClienteDashboard = () => {
 
     const usuarioActivo = localStorage.getItem('username') || 'sofia';
     const usuarioIdReal = localStorage.getItem('userId') ? parseInt(localStorage.getItem('userId')) : 5; // Tu ID Sofía de la captura
+    const navigate = useNavigate();
+    const handleLogout = () => {
+        try {
+            localStorage.clear();
+            navigate('/');
+        } catch (error) {
+            console.error('Error al cerrar sesión local:', error);
+        }
+    };
 
     const getAuthHeaders = () => {
         const token = localStorage.getItem('token');
@@ -148,47 +159,73 @@ const ClienteDashboard = () => {
         return carritoDeseos.reduce((acc, item) => acc + (item.cantidad * parseFloat(item.precio)), 0).toFixed(2);
     };
 
+    const toggleCarrito = () => setCarritoVisible(prev => !prev);
+    const cerrarCarrito = () => setCarritoVisible(false);
+
     const styles = {
+        drawer: {
+            position: 'fixed',
+            top: 0,
+            right: 0,
+            height: '100vh',
+            width: 'min(420px, 95vw)',
+            backgroundColor: '#ffffff',
+            zIndex: 1040,
+            boxShadow: '-12px 0 35px rgba(0,0,0,0.18)',
+            transition: 'transform 0.25s ease',
+            overflowY: 'auto',
+            transform: carritoVisible ? 'translateX(0)' : 'translateX(100%)'
+        },
+        drawerOverlay: {
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.38)',
+            zIndex: 1035
+        },
         mainContainer: { borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' },
-        headerSection: { background: 'linear-gradient(135deg, #e91e63 0%, #ad1457 100%)', padding: '24px', margin: '0', border: 'none' },
+        headerSection: { background: 'linear-gradient(135deg, #c2185b 0%, #ad1457 100%)', padding: '24px', margin: '0', border: 'none' },
+        footer: { background: 'linear-gradient(135deg, #c2185b 0%, #ad1457 100%)', color: '#ffffff', padding: '18px 24px', marginTop: '20px', textAlign: 'center' },
         menuBtn: { fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '6px', borderRadius: '8px', padding: '10px 20px', border: 'none', display: 'block', width: 'auto', backgroundColor: '#fff', color: '#e91e63' },
         contentArea: { backgroundColor: '#ffffff', padding: '30px', minHeight: '60vh', border: 'none' },
         cardBoutique: { border: '1px solid #f8bbd0', borderRadius: '14px', overflow: 'hidden' }
     };
 
     return (
-        <div className="w-100 px-1" style={styles.mainContainer}>
+        <div className="dashboard-responsive w-100 px-1" style={styles.mainContainer}>
             {/* HEADER INTERACTIVO CLIENTE */}
             <header style={styles.headerSection}>
-                <Row className="text-center align-items-center m-0 w-100">
-                    <Col className="p-0">
+                <Row className="align-items-center m-0 w-100 flex-column flex-md-row">
+                    <Col className="p-0 text-center text-md-start">
                         <h1 className="fw-bold m-0 text-white" style={{ fontSize: '2.1rem', letterSpacing: '0.5px' }}>
                             ✨ Mi Espacio de Tendencia Premium ✨
                         </h1>
                         <p className="text-white-50 m-0 mt-1 small fs-6">Bienvenida a la experiencia inteligente de compra, {usuarioActivo.toUpperCase()}</p>
                     </Col>
+                    <Col className="p-0 text-center text-md-end mt-3 mt-md-0" style={{ minWidth: '160px' }}>
+                        <Button
+                            variant="light"
+                            onClick={handleLogout}
+                            style={{ borderRadius: '20px', padding: '8px 20px', paddingTop: '6px', fontSize: '1.05rem', fontWeight: 'bold', color: '#ad1457' }}
+                        >
+                            Cerrar Sesión
+                        </Button>
+                    </Col>
                 </Row>
             </header>
 
             {/* BARRA DE ACCIONES PRINCIPALES */}
-            <nav className="d-flex justify-content-center align-items-center gap-3 my-3 p-2 bg-light rounded shadow-sm mx-auto" style={{ maxWidth: '95%' }}>                
-                <button 
-                    style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'catalogo' ? '#e91e63' : '#fff', color: vistaActiva === 'catalogo' ? '#fff' : '#e91e63' }} 
-                    onClick={() => { setVistaActiva('catalogo'); sincronizarCliente(); }}
-                >
+            <nav className="dashboard-menu" style={{ maxWidth: '100%', margin: 0 }}>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'catalogo' ? 'active' : ''}`} onClick={() => { setVistaActiva('catalogo'); sincronizarCliente(); }}>
                     🛍️ Explorar Catálogo Completo
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'probador' ? '#e91e63' : '#fff', color: vistaActiva === 'probador' ? '#fff' : '#e91e63' }} 
-                    onClick={() => { setVistaActiva('probador'); sincronizarCliente(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'probador' ? 'active' : ''}`} onClick={() => { setVistaActiva('probador'); sincronizarCliente(); }}>
                     🛎️ Llamar a un Asesor de Piso
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'outfit' ? '#e91e63' : '#fff', color: vistaActiva === 'outfit' ? '#fff' : '#e91e63' }} 
-                    onClick={() => setVistaActiva('outfit')}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'outfit' ? 'active' : ''}`} onClick={() => setVistaActiva('outfit')}>
                     ✨ Recomendador Inteligente de Outfits
+                </button>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${carritoVisible ? 'active' : ''}`} onClick={toggleCarrito}>
+                    🛍️ Bolsa ({carritoDeseos.length})
                 </button>
             </nav>
 
@@ -206,8 +243,7 @@ const ClienteDashboard = () => {
                 {/* VISTA 1: CATÁLOGO EN 3 COLUMNAS COMPRESAS + BOLSA DE DESEOS EN LADO DERECHO (TAMAÑO MEDIO-GRANDE) */}
                 {vistaActiva === 'catalogo' && (
                     <Row className="g-3">
-                        {/* COLUMNA IZQUIERDA: EL INVENTARIO DE PRENDAS */}
-                        <Col lg={8} className="border-end pe-3" style={{ borderColor: '#f8bbd0' }}>
+                        <Col xs={12}>
                             <h4 className="fw-bold mb-4" style={{ color: '#e91e63' }}>👗 Colección en Existencia de la Tienda</h4>
                             <Row className="g-3">
                                 {productos.map((p, i) => {
@@ -217,7 +253,7 @@ const ClienteDashboard = () => {
                                         : fallbackImg;
 
                                     return (
-                                        <Col md={6} lg={4} key={i} className="d-flex">
+                                        <Col md={6} lg={2} key={i} className="d-flex">
                                             <Card style={styles.cardBoutique} className="shadow-sm border-0 w-100 d-flex flex-column rounded-4 bg-white overflow-hidden">
                                                 <div className="d-flex justify-content-center align-items-center p-2 bg-light" style={{ height: '170px', overflow: 'hidden' }}>
                                                     <Card.Img variant="top" src={imagenSrc} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} onError={(e) => { e.target.src = fallbackImg; }} />
@@ -238,7 +274,6 @@ const ClienteDashboard = () => {
                                                         <div className="d-flex justify-content-between align-items-center mb-1">
                                                             <h5 className="fw-bold text-danger m-0 font-monospace">${parseFloat(p.precio || 0).toFixed(2)}</h5>
                                                         </div>
-                                                        {/* CAMBIO DE NEGOCIO: AÑADIR A CARRITO */}
                                                         <Button 
                                                             size="sm" 
                                                             style={{ backgroundColor: '#e91e63', borderColor: '#e91e63' }} 
@@ -254,41 +289,6 @@ const ClienteDashboard = () => {
                                     );
                                 })}
                             </Row>
-                        </Col>
-
-                        {/* COLUMNA DERECHA: MI CARRITO DE DESEOS MEDIO-GRANDE */}
-                        <Col lg={4} className="ps-3">
-                            <div className="bg-light p-3 rounded-4 border shadow-sm sticky-top" style={{ top: '20px' }}>
-                                <h4 className="fw-bold mb-3" style={{ color: '#e91e63' }}>❤️ Mi Bolsa de Deseos</h4>
-                                {carritoDeseos.length === 0 ? (
-                                    <div className="text-center py-4 text-muted fs-5">Tu bolsa está vacía. ¡Explora el catálogo y añade tus prendas favoritas! 💕</div>
-                                ) : (
-                                    <div>
-                                        <Table responsive hover size="sm" className="align-middle bg-white rounded shadow-sm overflow-hidden mb-3" style={{ fontSize: '1rem' }}>
-                                            <thead>
-                                                <tr className="table-secondary"><th>Prenda</th><th>Cant</th><th>Subtotal</th><th></th></tr>
-                                            </thead>
-                                            <tbody>
-                                                {carritoDeseos.map((item, idx) => (
-                                                    <tr key={idx}>
-                                                        <td className="fw-bold text-truncate" style={{ maxWidth: '120px' }}>{item.nombre}</td>
-                                                        <td><Badge bg="dark" className="fs-6">{item.cantidad} pz</Badge></td>
-                                                        <td className="fw-bold text-success font-monospace">${(item.cantidad * parseFloat(item.precio)).toFixed(2)}</td>
-                                                        <td><Button variant="link" className="text-danger p-0 fs-5" onClick={() => handleEliminarDelCarrito(item.id)}>🗑️</Button></td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </Table>
-                                        <div className="border-top pt-3 d-flex justify-content-between align-items-center mb-3">
-                                            <h5 className="fw-bold m-0 text-secondary">MONTO TOTAL ESTIMADO:</h5>
-                                            <h3 className="fw-bold text-danger font-monospace m-0">${calcularTotalBolsa()}</h3>
-                                        </div>
-                                        <Button className="w-100 fw-bold py-2 text-white shadow" style={{ backgroundColor: '#e91e63', border: 'none', fontSize: '1.1rem' }} onClick={() => Swal.fire('Listo', 'Muestra este resumen al cajero para procesar tu ticket al salir del probador.', 'success')}>
-                                            ✓ Confirmar Lista de Compra
-                                        </Button>
-                                    </div>
-                                )}
-                            </div>
                         </Col>
                     </Row>
                 )}
@@ -412,6 +412,56 @@ const ClienteDashboard = () => {
                     </div>
                 )}
             </div>
+
+            {carritoVisible && <div style={styles.drawerOverlay} onClick={cerrarCarrito} />}
+            <div style={styles.drawer} className="d-flex flex-column">
+                <div className="d-flex justify-content-between align-items-start p-3 border-bottom">
+                    <div>
+                        <h5 className="fw-bold mb-1">🛍️ Bolsa de Deseos</h5>
+                        <small className="text-muted">Revisa tus prendas guardadas y confirma tu ticket.</small>
+                    </div>
+                    <Button variant="link" className="text-danger fw-bold p-0 fs-3" onClick={cerrarCarrito}>×</Button>
+                </div>
+                <div className="flex-grow-1 p-3">
+                    {carritoDeseos.length === 0 ? (
+                        <div className="text-center text-muted py-5">
+                            <div className="fs-4">✨</div>
+                            <p className="mb-2">Tu bolsa está vacía.</p>
+                            <p className="small">Añade prendas para ver tu carrito aquí.</p>
+                        </div>
+                    ) : (
+                        <>
+                            <Table responsive hover size="sm" className="align-middle bg-white rounded shadow-sm overflow-hidden mb-3" style={{ fontSize: '0.95rem' }}>
+                                <thead>
+                                    <tr className="table-secondary"><th>Prenda</th><th>Cant</th><th>Subtotal</th><th></th></tr>
+                                </thead>
+                                <tbody>
+                                    {carritoDeseos.map((item, idx) => (
+                                        <tr key={idx}>
+                                            <td className="fw-bold text-truncate" style={{ maxWidth: '130px' }}>{item.nombre}</td>
+                                            <td><Badge bg="dark" className="fs-6">{item.cantidad} pz</Badge></td>
+                                            <td className="fw-bold text-success font-monospace">${(item.cantidad * parseFloat(item.precio)).toFixed(2)}</td>
+                                            <td><Button variant="link" className="text-danger p-0 fs-5" onClick={() => handleEliminarDelCarrito(item.id)}>🗑️</Button></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </Table>
+                            <div className="border-top pt-3 mb-3 d-flex justify-content-between align-items-center">
+                                <span className="fw-bold text-secondary">Total estimado</span>
+                                <span className="fw-bold text-danger font-monospace fs-5">${calcularTotalBolsa()}</span>
+                            </div>
+                            <Button className="w-100 fw-bold py-3 text-white shadow" style={{ backgroundColor: '#e91e63', border: 'none', fontSize: '1.05rem' }} onClick={() => { Swal.fire('Listo', 'Muestra este resumen al cajero para procesar tu ticket al salir del probador.', 'success'); cerrarCarrito(); }}>
+                                ✓ Confirmar Lista de Compra
+                            </Button>
+                        </>
+                    )}
+                </div>
+            </div>
+            <footer className="dashboard-footer">
+                <div className="dashboard-footer-title">© 2026 SmartBoutique</div>
+                <div className="dashboard-footer-subtitle">Experiencia de compra premium • Moda inteligente</div>
+                <div className="dashboard-footer-legal">Infraestructura Global Conectada a AWS RDS Postgres v15 • Sistema en Línea Activo</div>
+            </footer>
         </div>
     );
 };

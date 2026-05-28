@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Table, Badge, Form, Alert, Button, Card, Modal, InputGroup } from 'react-bootstrap';
 import Swal from 'sweetalert2';
+import { useNavigate } from 'react-router-dom';
 
 const VendedorDashboard = () => {
     const [productos, setProductos] = useState([]);
@@ -27,6 +28,15 @@ const VendedorDashboard = () => {
 
     const usuarioActivo = localStorage.getItem('username') || 'sherlyn';
     const rolActivo = localStorage.getItem('userRole') || 'vendedor';
+    const navigate = useNavigate();
+    const handleLogout = () => {
+        try {
+            localStorage.clear();
+            navigate('/');
+        } catch (error) {
+            console.error('Error al cerrar sesión local:', error);
+        }
+    };
 
     const getAuthHeaders = () => {
         const token = localStorage.getItem('token');
@@ -194,55 +204,50 @@ const VendedorDashboard = () => {
 
     const styles = {
         mainContainer: { borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' },
-        headerSection: { background: 'linear-gradient(135deg, #e91e63 0%, #c2185b 100%)', padding: '24px', margin: '0', border: 'none' },
+        headerSection: { background: 'linear-gradient(135deg, #c2185b 0%, #ad1457 100%)', padding: '24px', margin: '0', border: 'none' },
+        footer: { background: 'linear-gradient(135deg, #c2185b 0%, #ad1457 100%)', color: '#ffffff', padding: '18px 24px', marginTop: '20px', textAlign: 'center' },
         menuBtn: { fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '6px', borderRadius: '8px', padding: '10px 20px', border: 'none', display: 'block', width: 'auto', backgroundColor: '#fff', color: '#e91e63', transition: 'all 0.2s' },
         contentArea: { backgroundColor: '#ffffff', padding: '35px', minHeight: '60vh', border: 'none' },
         cardBoutique: { border: '1px solid #f8bbd0', borderRadius: '14px', overflow: 'hidden' }
     };
 
     return (
-        <div className="w-100 px-1" style={styles.mainContainer}>
+        <div className="dashboard-responsive w-100 px-1" style={styles.mainContainer}>
             {/* BANNER DE BIENVENIDA ASESOR */}
             <header style={styles.headerSection}>
-                <Row className="text-center align-items-center m-0 w-100">
-                    <Col className="p-0">
+                <Row className="align-items-center m-0 w-100 flex-column flex-md-row">
+                    <Col className="p-0 text-center text-md-start">
                         <h1 className="fw-bold m-0 text-white" style={{ fontSize: '2.1rem', letterSpacing: '0.5px' }}>
                             Panel de Piso de Venta: {usuarioActivo.toUpperCase()} 👑
                         </h1>
+                    </Col>
+                    <Col className="p-0 text-center text-md-end mt-3 mt-md-0" style={{ minWidth: '160px' }}>
+                        <Button
+                            variant="light"
+                            onClick={handleLogout}
+                            style={{ borderRadius: '20px', padding: '8px 20px', paddingTop: '6px', fontSize: '1.05rem', fontWeight: 'bold', color: '#e91e63' }}
+                        >
+                            Cerrar Sesión
+                        </Button>
                     </Col>
                 </Row>
             </header>
 
             {/* MENÚ DE OPCIONES ADAPTATIVO CON RECEPCIÓN AGREGADO */}
-            <nav className="d-flex justify-content-center align-items-center flex-wrap gap-3 my-3 p-2 bg-light rounded shadow-sm mx-auto" style={{ maxWidth: '95%' }}>                
-                <button 
-                    style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'inventario' ? '#e91e63' : '#fff', color: vistaActiva === 'inventario' ? '#fff' : '#e91e63' }} 
-                    onClick={() => { setVistaActiva('inventario'); sincronizarVendedor(); }}
-                >
+            <nav className="dashboard-menu" style={{ maxWidth: '100%', margin: 0 }}>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'inventario' ? 'active' : ''}`} onClick={() => { setVistaActiva('inventario'); sincronizarVendedor(); }}>
                     👗 Catálogo de Prendas
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'mercancia' ? '#e91e63' : '#fff', color: vistaActiva === 'mercancia' ? '#fff' : '#e91e63' }} 
-                    onClick={() => { setVistaActiva('mercancia'); setNuevaPrendaImagen(''); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'mercancia' ? 'active' : ''}`} onClick={() => { setVistaActiva('mercancia'); setNuevaPrendaImagen(''); }}>
                     🚛 Recepción de Mercancía
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'probadores' ? '#e91e63' : '#fff', color: vistaActiva === 'probadores' ? '#fff' : '#e91e63' }} 
-                    onClick={() => { setVistaActiva('probadores'); sincronizarVendedor(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'probadores' ? 'active' : ''}`} onClick={() => { setVistaActiva('probadores'); sincronizarVendedor(); }}>
                     🔔 Alertas Probadores {asistencias.length > 0 && <Badge bg="danger" className="ms-1 fs-6">{asistencias.length}</Badge>}
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'descuentos' ? '#e91e63' : '#fff', color: vistaActiva === 'descuentos' ? '#fff' : '#e91e63' }} 
-                    onClick={() => { setVistaActiva('descuentos'); sincronizarVendedor(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'descuentos' ? 'active' : ''}`} onClick={() => { setVistaActiva('descuentos'); sincronizarVendedor(); }}>
                     🎟️ Lista de Promociones
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'ventas' ? '#e91e63' : '#fff', color: vistaActiva === 'ventas' ? '#fff' : '#e91e63' }} 
-                    onClick={() => { setVistaActiva('ventas'); sincronizarVendedor(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'ventas' ? 'active' : ''}`} onClick={() => { setVistaActiva('ventas'); sincronizarVendedor(); }}>
                     🛍️ Ventas
                 </button>
             </nav>
@@ -635,6 +640,11 @@ const VendedorDashboard = () => {
                     </Modal.Footer>
                 </Form>
             </Modal>
+            <footer className="dashboard-footer">
+                <div className="dashboard-footer-title">© 2026 SmartBoutique</div>
+                <div className="dashboard-footer-subtitle">Panel de ventas premium • Punto de venta inteligente</div>
+                <div className="dashboard-footer-legal">Infraestructura Global Conectada a AWS RDS Postgres v15 • Sistema en Línea Activo</div>
+            </footer>
         </div>
     );
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Table, Badge, Form, Alert, Button, Card, Modal, InputGroup } from 'react-bootstrap';
 import Swal from 'sweetalert2';
+import { useNavigate } from 'react-router-dom';
 
 const EncargadoDashboard = () => {
     const [recentActivity, setRecentActivity] = useState([]);
@@ -48,6 +49,15 @@ const EncargadoDashboard = () => {
 
     const usuarioActivo = localStorage.getItem('username') || 'lesly';
     const rolActivo = localStorage.getItem('userRole') || 'encargado';
+    const navigate = useNavigate();
+    const handleLogout = () => {
+        try {
+            localStorage.clear();
+            navigate('/');
+        } catch (error) {
+            console.error('Error al cerrar sesión local:', error);
+        }
+    };
 
     const getAuthHeaders = () => {
         const token = localStorage.getItem('token');
@@ -366,55 +376,49 @@ const EncargadoDashboard = () => {
     const styles = {
         mainContainer: { borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' },
         headerSection: { background: 'linear-gradient(135deg, #c2185b 0%, #ad1457 100%)', padding: '26px', margin: '0', border: 'none' },
+        footer: { background: 'linear-gradient(135deg, #c2185b 0%, #ad1457 100%)', color: '#ffffff', padding: '18px 24px', marginTop: '20px', textAlign: 'center' },
         contentArea: { backgroundColor: '#ffffff', padding: '35px', minHeight: '65vh', height: '100%', border: 'none' },
         menuBtn: { fontSize: '1.15rem', textAlign: 'left', fontWeight: 'bold', marginBottom: '6px', borderRadius: '8px', padding: '12px 14px', border: 'none', display: 'block', width: '100%' },
         cardBoutique: { border: '1px solid #f8bbd0', borderRadius: '14px', overflow: 'hidden' }
     };
 
     return (
-        <div className="w-100 px-1" style={styles.mainContainer}>
+        <div className="dashboard-responsive w-100 px-1" style={styles.mainContainer}>
             {/* BANNER DE BIENVENIDA SUPERVISOR */}
             <header style={styles.headerSection}>
-                <Row className="text-center align-items-center m-0 w-100">
+                <Row className="align-items-center m-0 w-100">
                     <Col className="p-0">
                         <h1 className="fw-bold m-0 text-white" style={{ fontSize: '2.1rem', letterSpacing: '0.5px' }}>
                             Panel Supervisor: Encargado de Tienda ({usuarioActivo.toUpperCase()}) 🔑
                         </h1>
                     </Col>
+                    <Col className="p-0 text-end" style={{ minWidth: '160px' }}>
+                        <Button
+                            variant="light"
+                            onClick={handleLogout}
+                            style={{ borderRadius: '20px', padding: '8px 20px', paddingTop: '6px', fontSize: '1.05rem', fontWeight: 'bold', color: '#c2185b' }}
+                        >
+                            Cerrar Sesión
+                        </Button>
+                    </Col>
                 </Row>
             </header>
 
             {/* BARRA DE NAVEGACIÓN COMPARTIDA (LETRA ROBUSTA) */}
-            <nav className="d-flex justify-content-center align-items-center flex-wrap gap-3 my-3 p-2 bg-light rounded shadow-sm mx-auto" style={{ maxWidth: '95%' }}>                
-                <button 
-                    style={{ ...styles.menuBtn, width: 'auto', padding: '10px 22px', margin: 0, backgroundColor: vistaActiva === 'inventario' ? '#c2185b' : '#fff', color: vistaActiva === 'inventario' ? '#ffffff' : '#c2185b' }} 
-                    onClick={() => { setVistaActiva('inventario'); cargarDatosEncargado(); }}
-                >
+            <nav className="dashboard-menu" style={{ maxWidth: '100%', margin: 0 }}>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'inventario' ? 'active' : ''}`} onClick={() => { setVistaActiva('inventario'); cargarDatosEncargado(); }}>
                     👗 Prendas
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, width: 'auto', padding: '10px 22px', margin: 0, backgroundColor: vistaActiva === 'mercancia' ? '#c2185b' : '#fff', color: vistaActiva === 'mercancia' ? '#fff' : '#c2185b' }} 
-                    onClick={() => { setVistaActiva('mercancia'); cargarDatosEncargado(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'mercancia' ? 'active' : ''}`} onClick={() => { setVistaActiva('mercancia'); cargarDatosEncargado(); }}>
                     🚛 Recepción de Mercancía
                 </button>
-                
-                <button 
-                    style={{ ...styles.menuBtn, width: 'auto', padding: '10px 22px', margin: 0, backgroundColor: vistaActiva === 'devoluciones' ? '#c2185b' : '#fff', color: vistaActiva === 'devoluciones' ? '#fff' : '#c2185b' }} 
-                    onClick={() => { setVistaActiva('devoluciones'); cargarDatosEncargado(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'devoluciones' ? 'active' : ''}`} onClick={() => { setVistaActiva('devoluciones'); cargarDatosEncargado(); }}>
                     ↩️ Devoluciones
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, width: 'auto', padding: '10px 22px', margin: 0, backgroundColor: vistaActiva === 'ventas' ? '#c2185b' : '#fff', color: vistaActiva === 'ventas' ? '#fff' : '#c2185b' }} 
-                    onClick={() => { setVistaActiva('ventas'); cargarDatosEncargado(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'ventas' ? 'active' : ''}`} onClick={() => { setVistaActiva('ventas'); cargarDatosEncargado(); }}>
                     🛍️ Ventas
                 </button>
-                <button 
-                    style={{ ...styles.menuBtn, width: 'auto', padding: '10px 22px', margin: 0, backgroundColor: vistaActiva === 'caja' ? '#c2185b' : '#fff', color: vistaActiva === 'caja' ? '#fff' : '#c2185b' }} 
-                    onClick={() => { setVistaActiva('caja'); cargarDatosEncargado(); }}
-                >
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'caja' ? 'active' : ''}`} onClick={() => { setVistaActiva('caja'); cargarDatosEncargado(); }}>
                     💵 Control de Caja
                 </button>
             </nav>
@@ -423,14 +427,15 @@ const EncargadoDashboard = () => {
 
             <div style={styles.contentArea}>
                 {vistaActiva === 'bienvenida' && (
-                    <div className="text-center py-5">
-                        <div style={{ fontSize: '5rem' }}>✨</div>
-                        <h3 className="fw-bold mt-3" style={{ color: '#c2185b' }}>Terminal de Supervisión Operativa Lista</h3>
-                        <p className="text-muted" style={{ fontSize: '1.1rem' }}>Gestión de inventarios locales, incidencias de piso, rebajas y arqueos de caja rápidos.</p>
-                    </div>
+                    <Row className="align-items-center py-4">
+                        <Col xs={12} className="text-center">
+                            <div style={{ fontSize: '5rem' }}>✨</div>
+                            <h3 className="fw-bold mt-3" style={{ color: '#c2185b' }}>Terminal de Supervisión Operativa Lista</h3>
+                            <p className="text-muted" style={{ fontSize: '1.1rem' }}>Gestión de inventarios locales, incidencias de piso, rebajas y arqueos de caja rápidos.</p>
+                        </Col>
+                    </Row>
                 )}
 
-                {/* VISTA A: CATÁLOGO DE PRENDAS VERTICAL (IGUAL AL ADMIN CON BOTÓN DE ACTUALIZAR) */}
                 {vistaActiva === 'inventario' && (
                     <div>
                         <h4 className="fw-bold mb-4" style={{ color: '#c2185b' }}>👗 Catálogo de Prendas en Existencia</h4>
@@ -438,37 +443,26 @@ const EncargadoDashboard = () => {
                             {productos.map((p, i) => {
                                 const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23ad1457' text-anchor='middle'>Prenda SmartBoutique</text></svg>";
                                 const tagsArray = p.tags && Array.isArray(p.tags) ? p.tags : [];
-                                let imagenSrc = fallbackImg; 
+                                let imagenSrc = fallbackImg;
 
                                 if (p.imagen_url && p.imagen_url.trim() !== '' && !p.imagen_url.includes('[object Object]')) {
-                                    if (p.imagen_url.startsWith('data:image')) {
+                                    if (p.imagen_url.startsWith('data:image') || p.imagen_url.includes('http')) {
                                         imagenSrc = p.imagen_url;
-                                    } else if (!p.imagen_url.includes('http')) {
-                                        imagenSrc = `data:image/jpeg;base64,${p.imagen_url}`;
                                     } else {
-                                        imagenSrc = p.imagen_url;
+                                        imagenSrc = `data:image/jpeg;base64,${p.imagen_url}`;
                                     }
                                 }
 
                                 return (
-                                    <Col xs={12} md={6} lg={4} key={i} className="d-flex">
-                                        <Card style={styles.cardBoutique} className="shadow-sm border-0 w-100 d-flex flex-column rounded-4 bg-white overflow-hidden">
-                                            <div className="d-flex justify-content-center align-items-center p-3 bg-light" style={{ height: '220px', overflow: 'hidden', backgroundColor: '#fffdfd', borderBottom: '1px solid #f8bbd0' }}>
-                                                <Card.Img variant="top" src={imagenSrc} style={{ maxHeight: '100%', maxWidth: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }} onError={(e) => { e.target.src = fallbackImg; }} />
+                                    <Col xs={12} md={6} lg={2} key={i} className="d-flex">
+                                        <Card style={styles.cardBoutique} className="shadow-sm h-100 overflow-hidden bg-white border-0">
+                                            <div style={{ width: '100%', minHeight: '200px', overflow: 'hidden' }}>
+                                                <Card.Img src={imagenSrc} alt={p.nombre || 'Prenda'} style={{ width: '100%', height: '220px', objectFit: 'cover' }} />
                                             </div>
                                             <Card.Body className="d-flex flex-column justify-content-between p-3" style={{ fontSize: '1.05rem' }}>
                                                 <div>
-                                                    <div className="d-flex justify-content-between align-items-center mb-2">
-                                                        <span className="text-muted fw-bold text-uppercase" style={{ fontSize: '0.85rem' }}>{p.categoria || 'Moda'}</span>
-                                                        <Badge bg="light" text="dark" className="border">ID: #{p.id}</Badge>
-                                                    </div>
                                                     <Card.Title className="fw-bold text-dark fs-5 mb-1 text-truncate">{p.nombre}</Card.Title>
                                                     <Card.Text className="text-muted mb-3 text-truncate-2" style={{ fontSize: '0.92rem', minHeight: '40px', lineHeight: '1.3' }}>{p.descripcion || 'Sin descripción asignada todavía.'}</Card.Text>
-                                                    <div className="d-flex flex-wrap gap-1 mb-3">
-                                                        <Badge bg="dark" className="px-2 py-1 small">Talla: {p.talla || 'M'}</Badge>
-                                                        <Badge bg="secondary" className="px-2 py-1 small">Color: {p.color || 'Unicolor'}</Badge>
-                                                        <Badge bg={p.stock > 10 ? 'success' : 'danger'} className="px-2 py-1 small">Stock: {p.stock} pz</Badge>
-                                                    </div>
                                                 </div>
                                                 <div className="mt-auto pt-2">
                                                     <div className="d-flex justify-content-between align-items-center mb-2">
@@ -480,7 +474,6 @@ const EncargadoDashboard = () => {
                                                             <h4 className="fw-bold text-danger m-0 font-monospace" style={{ fontSize: '1.45rem' }}>${parseFloat(p.precio || 0).toFixed(2)}</h4>
                                                         </div>
                                                     </div>
-                                                    {/* ⚙️ EL ENCARGADO SÍ CUENTA CON PRIVILEGIO DE ACTUALIZAR PRENDA */}
                                                     <Button style={{ backgroundColor: '#c2185b', borderColor: '#c2185b', borderRadius: '8px', fontSize: '1rem' }} className="w-100 fw-bold py-2 text-white shadow-sm mt-2" onClick={() => abrirFormularioProducto(p)}>
                                                         ⚙ Actualizar Prenda
                                                     </Button>
@@ -744,6 +737,11 @@ const EncargadoDashboard = () => {
                     </Form>
                 </Modal.Body>
             </Modal>
+            <footer className="dashboard-footer">
+                <div className="dashboard-footer-title">© 2026 SmartBoutique</div>
+                <div className="dashboard-footer-subtitle">Gestión de tienda inteligente • Control operacional</div>
+                <div className="dashboard-footer-legal">Infraestructura Global Conectada a AWS RDS Postgres v15 • Sistema en Línea Activo</div>
+            </footer>
         </div>
     );
 };

@@ -38,14 +38,30 @@ const Home = () => {
     };
 
     const styles = {
-        mainBg: {
-            backgroundColor: '#fff5f8', // Rosa muy tenue corporativo de fondo general
+        mainLayout: {
+            display: 'flex',
+            flexDirection: 'column',
             minHeight: '100vh',
-            paddingBottom: '50px'
+            backgroundColor: '#f1d4e9', // Rosa muy tenue corporativo de fondo general
+            margin: '0',
+            padding: '0',
+        },
+        contentBody: {
+            flex: '1 0 auto', // Empuja al footer hacia abajo de forma dinámica
+            paddingBottom: '30px'
         },
         navbar: {
             backgroundColor: '#ff85a2', // Rosa fuerte del branding
-            boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+            borderRadious: '0px 0px 10px 10px',
+        },
+        footer: {
+            backgroundColor: '#ff85a2',
+            borderTop: '2px solid #ff85a2',
+            color: '#ad1457',
+            padding: '15px 0',
+            fontSize: '0.95rem',
+            boxShadow: '0 -2px 10px rgba(0,0,0,0.03)'
         }
     };
 
@@ -58,45 +74,32 @@ const Home = () => {
     }
 
     return (
-        <div style={styles.mainBg}>
-            {/* Navbar compartido por toda la infraestructura */}
-            <Navbar style={styles.navbar} className="px-4 mb-4" variant="dark">
-                <Navbar.Brand className="fw-bold" style={{ fontSize: '1.6rem' }}>
-                    ✨ SmartBoutique
-                </Navbar.Brand>
-                <Navbar.Collapse className="justify-content-end">
-                    <Navbar.Text className="text-white me-3 fw-semibold">
-                        Hola, <span className="text-decoration-underline">{username}</span> 🌸
-                    </Navbar.Text>
-                    <Button 
-                        variant="light" 
-                        className="fw-bold text-danger btn-sm" 
-                        onClick={handleLogout}
-                        style={{ borderRadius: '20px', padding: '5px 15px' }}
-                    >
-                        Cerrar Sesión
-                    </Button>
-                </Navbar.Collapse>
-            </Navbar>
+        <div style={styles.mainLayout}>
+            
+            {/* Contenedor del Cuerpo Superior (Navbar + Dashboards) */}
+            <div style={styles.contentBody}>
+                {/* Navbar compartido por toda la infraestructura */}
+                
+                {/* 🛠️ CONTENEDOR PADRE MODIFICADO CON PASO DE PROPS DE SESIÓN EN TIEMPO REAL 🛠️ */}
+                <Container fluid className="px-3">
+                    {role === 'admin' && <AdminDashboard usuarioActivo={username} rolActivo={role} />}
+                    
+                    {role === 'encargado' && <EncargadoDashboard />}
+                    
+                    {role === 'vendedor' && <VendedorDashboard />}
+                    
+                    {role === 'cliente' && <ClienteDashboard />}
+                    
+                    {/* Fallback de seguridad por si acaso */}
+                    {!['admin', 'encargado', 'vendedor', 'cliente'].includes(role) && (
+                        <div className="text-center py-5 bg-white rounded shadow-sm ">
+                            <h3>⚠️ Acceso Restringido</h3>
+                            <p className="text-muted">Tu rol (<code>{role}</code>) no cuenta con una interfaz modular asignada.</p>
+                        </div>
+                    )}
+                </Container>
+            </div>
 
-            {/* 🛠️ CONTENEDOR PADRE MODIFICADO CON PASO DE PROPS DE SESIÓN EN TIEMPO REAL 🛠️ */}
-            <Container fluid className="px-4">
-                {role === 'admin' && <AdminDashboard usuarioActivo={username} rolActivo={role} />}
-                
-                {role === 'encargado' && <EncargadoDashboard />}
-                
-                {role === 'vendedor' && <VendedorDashboard />}
-                
-                {role === 'cliente' && <ClienteDashboard />}
-                
-                {/* Fallback de seguridad por si acaso */}
-                {!['admin', 'encargado', 'vendedor', 'cliente'].includes(role) && (
-                    <div className="text-center py-5 bg-white rounded shadow-sm">
-                        <h3>⚠️ Acceso Restringido</h3>
-                        <p className="text-muted">Tu rol (<code>{role}</code>) no cuenta con una interfaz modular asignada.</p>
-                    </div>
-                )}
-            </Container>
         </div>
     );
 };

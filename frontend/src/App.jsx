@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Login from './Login';
 import Home from './Home';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import './dashboard-responsive.css';
 
 function App() {
   return (
