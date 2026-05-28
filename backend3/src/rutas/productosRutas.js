@@ -157,11 +157,60 @@ router.delete('/usuarios/:id', verificarToken, esGerente, async (req, res) => {
 
 router.get('/', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM productos ORDER BY id DESC;');
-        res.json(result.rows);
+        // Extraer parámetros con valores por defecto
+        const pagina = parseInt(req.query.page) || 1;
+        const limite = parseInt(req.query.limit) || 12;
+        const buscar = req.query.search ? req.query.search.trim() : '';
+        const calcularOffset = (pagina - 1) * limite;
+
+        let queryProductos = '';
+        let queryCount = '';
+        let queryParams = [];
+
+        if (buscar !== '') {
+            // Filtro dinámico por coincidencia parcial en nombre, categoría o etiquetas
+            queryProductos = `
+                SELECT * FROM productos 
+                WHERE nombre ILIKE $1 OR categoria ILIKE $1 OR $1 = ANY(tags)
+                ORDER BY id DESC 
+                LIMIT $2 OFFSET $3;
+            `;
+            queryCount = `
+                SELECT COUNT(*) FROM productos 
+                WHERE nombre ILIKE $1 OR categoria ILIKE $1 OR $1 = ANY(tags);
+            `;
+            queryParams = [`%${buscar}%`];
+        } else {
+            queryProductos = `
+                SELECT * FROM productos 
+                ORDER BY id DESC 
+                LIMIT $1 OFFSET $2;
+            `;
+            queryCount = `SELECT COUNT(*) FROM productos;`;
+        }
+
+        // Ejecución paralela en AWS RDS para optimizar tiempos de respuesta
+        const [resProductos, resCount] = await Promise.all([
+            pool.query(queryProductos, buscar !== '' ? [...queryParams, limite, calcularOffset] : [limite, calcularOffset]),
+            pool.query(queryCount, buscar !== '' ? queryParams : [])
+        ]);
+
+        const totalRegistros = parseInt(resCount.rows[0].count);
+        const totalPaginas = Math.ceil(totalRegistros / limite);
+
+        res.status(200).json({
+            records: resProductos.rows,
+            meta: {
+                totalRecords: totalRegistros,
+                totalPages: totalPaginas,
+                currentPage: pagina,
+                limit: limite
+            }
+        });
+
     } catch (error) {
         console.error('❌ ERROR REAL EN POSTGRESQL (RDS):', error);
-        res.status(500).json({ error: 'Error al traer productos' });
+        res.status(500).json({ error: 'Error al traer productos paginados.' });
     }
 });
 
@@ -568,14 +617,14 @@ router.get('/movimientos-caja/detalles-ticket/:id', verificarToken, async (req, 
 // =================================================================
 router.post('/asistencia', async (req, res) => {
     // Ajustamos la variable a 'probador_id' para que coincida con tu base de datos
-    const { probador_id, nota, usuario_id } = req.body; 
+    const { probador_id, nota } = req.body; 
     try {
         // Usamos los nombres reales de tus columnas: probador_id, estado y fecha_solicitud
         const queryInsert = `
-            INSERT INTO asistencia_probadores (probador_id, estado, atendido_por, fecha_solicitud, nota, usuario_id) 
-            VALUES ($1, 'pendiente', NULL, NOW(), $2, $3);
+            INSERT INTO asistencia_probadores (probador_id, estado, atendido_por, fecha_solicitud, nota) 
+            VALUES ($1, 'pendiente', NULL, NOW(), $2);
         `;
-        await pool.query(queryInsert, [probador_id, nota, usuario_id]);
+        await pool.query(queryInsert, [probador_id, nota]);
         
         res.status(201).json({ message: 'Asistencia solicitada con éxito.' });
     } catch (error) { 

@@ -25,6 +25,10 @@ const AdminDashboard = () => {
     const [movimientosCajaData, setMovimientosCajaData] = useState([]); // ──> Guardará las aperturas y cierres
     const [showModalAbrir, setShowModalAbrir] = useState(false); // Controla el modal flotante
     const [montoInicialInput, setMontoInicialInput] = useState(''); // Guarda la cantidad ingresada
+    const [paginaActual, setPaginaActual] = useState(1);
+const [terminoBusqueda, setTerminoBusqueda] = useState('');
+const [totalPaginas, setTotalPaginas] = useState(1);
+const [cargandoMas, setCargandoMas] = useState(false);
 
     // Formulario de Productos (Inserción rápida y extendida)
     const [nombre, setNombre] = useState('');

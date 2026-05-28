@@ -70,7 +70,6 @@ const ClienteDashboard = () => {
             probador_id: probadorSeleccionado,
             nota: notaAsistencia,
             estado: 'pendiente',
-            usuario_id: usuarioIdReal
         };
 
         try {
