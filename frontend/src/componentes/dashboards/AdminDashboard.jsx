@@ -1611,7 +1611,7 @@ const AdminDashboard = () => {
                                 {/* 📊 TABLA HISTÓRICA: CONSULTA DE LO QUE YA SE DEVOLVIÓ */}
                                 {/* ================================================================= */}
                                 <div className="bg-white rounded-4 p-3 shadow-sm border">
-                                    <h6 className="fw-bold text-secondary mb-3 small">📋 Bitácora Histórica de Devoluciones</h6>
+                                    <h6 className="fw-bold text-secondary mb-3 small">📋 Historial de Devoluciones</h6>
                                     <Table responsive hover size="sm" className="small text-center align-middle mb-0 table-borderless">
                                         <thead className="table-light">
                                             <tr>

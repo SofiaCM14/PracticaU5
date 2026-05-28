@@ -583,21 +583,65 @@ router.get('/movimientos-caja/detalles-ticket/:id', verificarToken, async (req, 
         res.status(500).json({ error: "No se pudo procesar el desglose del ticket." });
     }
 });
+// =================================================================
+// 🔔 ENDPOINT: SOLICITAR ASISTENCIA DESDE EL PROBADOR (POST)
+// =================================================================
 router.post('/asistencia', async (req, res) => {
-    const { probador, detalle } = req.body;
+    // Ajustamos la variable a 'probador_id' para que coincida con tu base de datos
+    const { probador_id } = req.body; 
     try {
-        await pool.query("INSERT INTO asistencia_probadores (probador, detalle, estado, fecha) VALUES ($1, $2, 'Pendiente', NOW());", [probador, detalle]);
-        res.status(201).json({ message: 'Asistencia solicitada' });
-    } catch (error) { res.status(500).json({ error: 'Error al solicitar asistencia' }); }
+        // Usamos los nombres reales de tus columnas: probador_id, estado y fecha_solicitud
+        const queryInsert = `
+            INSERT INTO asistencia_probadores (probador_id, estado, fecha_solicitud) 
+            VALUES ($1, 'pendiente', NOW());
+        `;
+        await pool.query(queryInsert, [probador_id]);
+        
+        res.status(201).json({ message: 'Asistencia solicitada con éxito.' });
+    } catch (error) { 
+        console.error('Error en POST /asistencia:', error);
+        res.status(500).json({ error: 'Error interno al solicitar asistencia en probadores.' }); 
+    }
 });
 
+// =================================================================
+// 📡 ENDPOINT: LEER LLAMADAS ACTIVAS PARA EL VENDEDOR (GET)
+// =================================================================
 router.get('/asistencia', async (req, res) => {
     try {
-        const result = await pool.query("SELECT * FROM asistencia_probadores WHERE estado = 'Pendiente' ORDER BY fecha DESC;");
+        // Corregimos el filtro a 'pendiente' en minúsculas y ordenamos por fecha_solicitud
+        const querySelect = `
+            SELECT id, probador_id, estado, fecha_solicitud 
+            FROM asistencia_probadores 
+            WHERE estado = 'pendiente' 
+            ORDER BY fecha_solicitud DESC;
+        `;
+        const result = await pool.query(querySelect);
         res.json(result.rows);
-    } catch (error) { res.status(500).json({ error: 'Error al leer probadores' }); }
+    } catch (error) { 
+        console.error('Error en GET /asistencia:', error);
+        res.status(500).json({ error: 'No se pudo cargar el flujo de probadores.' }); 
+    }
 });
+// ✔️ NUEVO ENDPOINT: MARCAR ALERTA COMO ATENDIDA POR EL ASESOR (PUT)
+router.put('/asistencia/atender/:id', async (req, res) => {
+    const { id } = req.params;
+    const { usuario_id } = req.body; // ID del vendedor que atiende (ej: Sherlyn = 4)
 
+    try {
+        // Actualiza el estado a 'atendido' y registra el ID del empleado que fue a ayudar
+        const queryUpdate = `
+            UPDATE asistencia_probadores 
+            SET estado = 'atendido', atendido_por = $1 
+            WHERE id = $2;
+        `;
+        await pool.query(queryUpdate, [parseInt(usuario_id || 4), parseInt(id)]);
+        res.status(200).json({ ok: true, message: "Llamada marcada como atendida." });
+    } catch (error) {
+        console.error('Error en PUT /asistencia/atender:', error);
+        res.status(500).json({ error: "No se pudo actualizar el estado del probador." });
+    }
+});
 router.post('/wishlist', async (req, res) => {
     const { usuario_id, producto_id } = req.body;
     try {
@@ -703,6 +747,42 @@ router.get('/movimientos-caja', verificarToken, async (req, res) => {
     } catch (error) {
         console.error("Error crítico leyendo movimientos_caja de RDS:", error);
         res.status(500).json({ error: "No se pudieron obtener los registros de caja." });
+    }
+});
+// =================================================================
+// 🔒 NUEVO ENDPOINT: VALIDAR AUTORIZACIÓN DE DESCUENTO (POST)
+// =================================================================
+router.post('/usuarios/validar-autorizacion', verificarToken, async (req, res) => {
+    const { supervisor_id } = req.body;
+
+    try {
+        // Consultamos el rol y nombre del empleado directamente
+        const query = `SELECT username, rol FROM usuarios WHERE id = $1;`;
+        const result = await pool.query(query, [parseInt(supervisor_id)]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ valid: false, error: "El ID de empleado no existe." });
+        }
+
+        const supervisor = result.rows[0];
+
+        // 🛡️ Filtro de privilegios: Solo Admin o Encargado pueden liberar descuentos
+        if (supervisor.rol === 'admin' || supervisor.rol === 'encargado') {
+            return res.status(200).json({ 
+                valid: true, 
+                supervisor: supervisor.username, 
+                rol: supervisor.rol 
+            });
+        } else {
+            return res.status(403).json({ 
+                valid: false, 
+                error: "Permiso denegado. Este empleado no tiene rango de Supervisor." 
+            });
+        }
+
+    } catch (error) {
+        console.error("Error en el módulo de seguridad de descuentos:", error);
+        res.status(500).json({ error: "Error interno al validar la firma de autorización." });
     }
 });
 export default router;
