@@ -482,7 +482,7 @@ const EncargadoDashboard = () => {
                                                     </div>
                                                     {/* ⚙️ EL ENCARGADO SÍ CUENTA CON PRIVILEGIO DE ACTUALIZAR PRENDA */}
                                                     <Button style={{ backgroundColor: '#c2185b', borderColor: '#c2185b', borderRadius: '8px', fontSize: '1rem' }} className="w-100 fw-bold py-2 text-white shadow-sm mt-2" onClick={() => abrirFormularioProducto(p)}>
-                                                        ⚙ nighttime_gear Actualizar Prenda
+                                                        ⚙ Actualizar Prenda
                                                     </Button>
                                                 </div>
                                             </Card.Body>
@@ -496,8 +496,8 @@ const EncargadoDashboard = () => {
 
                 {/* VISTA B: RECEPCIÓN DE MERCANCÍA INTEGRAL */}
                 {vistaActiva === 'mercancia' && (
-                    <div className="mx-auto animate__animated animate__fadeIn" style={{ maxWidth: '900px', background: '#fffdfd', borderRadius: '18px', padding: '35px', border: '1px solid #f8bbd0', boxShadow: '0 4px 18px rgba(0,0,0,0.05)', fontSize: '1.05rem' }}>
-                        <div className="mb-4 text-center pb-2 border-bottom"><h3 className="fw-bold mb-1" style={{ color: '#c2185b' }}>🚛 Inyección de Mercancía Nueva (Almacén)</h3></div>
+                    <div className="mx-auto animate__animated animate__fadeIn" style={{ maxWidth: '900px', background: '#e68fbf', borderRadius: '18px', padding: '35px', border: '1px solid #f8bbd0', boxShadow: '0 4px 18px rgba(0,0,0,0.05)', fontSize: '1.05rem' }}>
+                        <div className="mb-4 text-center pb-2 border-bottom"><h3 className="fw-bold mb-1" style={{ color: '#c2185b' }}>Agregar Nueva Prenda.</h3></div>
                         <Form onSubmit={handleAddProductEncargado}>
                             <Row className="g-3 mb-3">
                                 <Col md={6}><Form.Group><Form.Label className="fw-bold text-muted">Nombre del Artículo</Form.Label><Form.Control type="text" value={nombre} onChange={e => setNombre(e.target.value)} required placeholder="Ej: Falda mezclilla" className="form-control-lg" /></Form.Group></Col>
@@ -512,7 +512,7 @@ const EncargadoDashboard = () => {
                             <Form.Group className="mb-3"><Form.Label className="fw-bold text-muted">Cargar Fotografía</Form.Label><Form.Control type="file" accept="image/*" onChange={handleFileChange} className="form-control-lg" /></Form.Group>
                             <Form.Group className="mb-3"><Form.Label className="fw-bold text-muted">Etiquetas (Separadas por comas)</Form.Label><Form.Control type="text" value={editProdTags} onChange={e => setEditProdTags(e.target.value)} placeholder="mezclilla, casual, moda" className="form-control-lg" /></Form.Group>
                             <Form.Group className="mb-4"><Form.Label className="fw-bold text-muted">Descripción del Producto</Form.Label><Form.Control as="textarea" rows={2} value={editProdDescripcion} onChange={e => setEditProdDescripcion(e.target.value)} className="form-control-lg" /></Form.Group>
-                            <Button type="submit" className="w-100 fw-bold py-3 text-white shadow" style={{ backgroundColor: '#c2185b', border: 'none', borderRadius: '10px', fontSize: '1.15rem' }}>📦 Inyectar Prenda al Catálogo</Button>
+                            <Button type="submit" className="w-100 fw-bold py-3 text-white shadow" style={{ backgroundColor: '#c2185b', border: 'none', borderRadius: '10px', fontSize: '1.15rem' }}> 📦 Guardar Nuevo Producto.</Button>
                         </Form>
                     </div>
                 )}
@@ -575,7 +575,7 @@ const EncargadoDashboard = () => {
                 {vistaActiva === 'ventas' && (
                     <div className="animate__animated animate__fadeIn" style={{ fontSize: '1.05rem' }}>
                         <h4 className="fw-bold mb-3" style={{ color: '#c2185b' }}>🛒 Terminal de Cobro Exprés (Supervisor Rango 2)</h4>
-                        <Form onSubmit={handleCompraDirectaVendedor} className="row g-3 mb-5 p-3 bg-light rounded align-items-end m-0 border shadow-sm">
+                        <Form onSubmit={handleCompraDirectaEncargado} className="row g-3 mb-5 p-3 bg-light rounded align-items-end m-0 border shadow-sm">
                             <Col md={2}><Form.Group><Form.Label className="fw-bold text-muted mb-1">ID Producto</Form.Label><Form.Control type="number" placeholder="Ej: 3" value={idProductoVenta} onChange={e => setIdProductoVenta(e.target.value)} className="form-control-lg text-center fw-bold" required /></Form.Group></Col>
                             <Col md={2}><Form.Group><Form.Label className="fw-bold text-muted mb-1">Cantidad</Form.Label><Form.Control type="number" placeholder="Pzs" value={cantidadVenta} onChange={e => setCantidadVenta(e.target.value)} className="form-control-lg text-center fw-bold" required /></Form.Group></Col>
                             <Col md={5}>
@@ -605,7 +605,7 @@ const EncargadoDashboard = () => {
                                         <td className="text-muted">${parseFloat(venta.descuento_aplicado || 0).toFixed(2)}</td>
                                         <td className="fw-bold text-success fs-5">${parseFloat(venta.total).toFixed(2)}</td>
                                         <td className="text-muted">{venta.fecha_venta ? new Date(venta.fecha_venta).toLocaleString('es-MX') : '---'}</td>
-                                        <td><Button variant="outline-secondary" className="btn-sm py-1 px-3 fw-bold" onClick={() => handleVerDetallesTicket(venta.id)}>👁️ Ver Ticket</Button></td>
+                                        <td><Button variant="outline-secondary" className="btn-sm py-1 px-3 fw-bold" onClick={() => handleVerDetallesTicket(venta.id)}>👁️ Ver Detalles</Button></td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -718,7 +718,7 @@ const EncargadoDashboard = () => {
 
             {/* ====== MODAL: ACTUALIZACIÓN FLOTANTE PRENDAS ====== */}
             <Modal show={showProdModal} onHide={() => setShowProdModal(false)} centered size="lg">
-                <Modal.Header closeButton style={{ borderBottom: '1px solid #f8bbd0' }}><Modal.Title className="fw-bold fs-4" style={{ color: '#ad1457' }}>⚙️ Actualizar Prenda (Supervisor)</Modal.Title></Modal.Header>
+                <Modal.Header closeButton style={{ borderBottom: '1px solid #f8bbd0' }}><Modal.Title className="fw-bold fs-4" style={{ color: '#ad1457' }}>⚙️ Actualizar Prenda</Modal.Title></Modal.Header>
                 <Modal.Body style={{ backgroundColor: '#fffdfd', fontSize: '1.05rem' }}>
                     <Form onSubmit={handleSaveEditProduct}>
                         <Row className="g-3 mb-2">

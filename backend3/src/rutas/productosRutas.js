@@ -155,9 +155,6 @@ router.delete('/usuarios/:id', verificarToken, esGerente, async (req, res) => {
     }
 });
 
-// ==========================================
-// 3. TABLA: productos (INVENTARIO COMPLETO - CRUD)
-// ==========================================
 router.get('/', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM productos ORDER BY id DESC;');
@@ -167,9 +164,6 @@ router.get('/', async (req, res) => {
         res.status(500).json({ error: 'Error al traer productos' });
     }
 });
-
-// 🛠️ POST MODIFICADO: Guarda productos y registra movimientos en auditoría
-// ====== BUSCA EL POST DE PRODUCTOS EN productosRutas.js ======
 
 router.post('/', async (req, res) => {
     // 1. Extraemos los datos del body (incluyendo el usuario operador que manda el front)
@@ -227,14 +221,6 @@ router.put('/:id', async (req, res) => {
         res.status(500).json({ error: 'Error al actualizar el producto' });
     }
 });
-
-// 🛍️ ENDPOINT CORREGIDO: OBTENER VENTAS DEL TURNO ACTIVO (GET)
-// =================================================================
-// 🛍️ ENDPOINT 1: OBTENER VENTAS DEL TURNO (GET)
-// =================================================================
-// =================================================================
-// 🛍️ ENDPOINT: OBTENER VENTAS EXCLUSIVAS DEL TURNO ACTIVO
-// =================================================================
 router.get('/ventas', verificarToken, async (req, res) => {
     try {
         // 1. Buscamos la última caja que se encuentre 'abierta'
@@ -329,9 +315,7 @@ router.get('/devoluciones', verificarToken, async (req, res) => {
         res.status(500).json({ error: 'No se pudo cargar el historial de devoluciones.' });
     }
 });
-// =================================================================
-// ↩️ NUEVO ENDPOINT: PROCESAR REGISTRO DE DEVOLUCIÓN (POST)
-// =================================================================
+
 router.post('/devoluciones', verificarToken, async (req, res) => {
     const { 
         venta_id, 
@@ -500,9 +484,7 @@ router.post('/movimientos-caja/cerrar-caja', verificarToken, async (req, res) =>
         res.status(500).json({ error: "No se pudo procesar el cierre." });
     }
 });
-// =================================================================
-// 🟢 ENDPOINT 3: REALIZAR LA APERTURA DE CAJA (POST)
-// =================================================================
+
 router.post('/movimientos-caja/abrir-caja', verificarToken, async (req, res) => {
     const { usuario_id, monto_inicial } = req.body;
     const idOperador = usuario_id ? parseInt(usuario_id) : 1;
@@ -545,9 +527,7 @@ router.post('/movimientos-caja/abrir-caja', verificarToken, async (req, res) => 
         res.status(500).json({ error: "No se pudo abrir la caja en el servidor." });
     }
 });
-// =================================================================
-// 📄 NUEVO: Endpoint para obtener el desglose de prendas de un corte (GET)
-// =================================================================
+
 router.get('/movimientos-caja/detalles-ticket/:id', verificarToken, async (req, res) => {
     const { id } = req.params;
 
@@ -588,14 +568,14 @@ router.get('/movimientos-caja/detalles-ticket/:id', verificarToken, async (req, 
 // =================================================================
 router.post('/asistencia', async (req, res) => {
     // Ajustamos la variable a 'probador_id' para que coincida con tu base de datos
-    const { probador_id } = req.body; 
+    const { probador_id, nota, usuario_id } = req.body; 
     try {
         // Usamos los nombres reales de tus columnas: probador_id, estado y fecha_solicitud
         const queryInsert = `
-            INSERT INTO asistencia_probadores (probador_id, estado, fecha_solicitud) 
-            VALUES ($1, 'pendiente', NOW());
+            INSERT INTO asistencia_probadores (probador_id, estado, atendido_por, fecha_solicitud, nota) 
+            VALUES ($1, 'pendiente', NULL, NOW(), $2);
         `;
-        await pool.query(queryInsert, [probador_id]);
+        await pool.query(queryInsert, [probador_id, nota]);
         
         res.status(201).json({ message: 'Asistencia solicitada con éxito.' });
     } catch (error) { 
@@ -611,9 +591,9 @@ router.get('/asistencia', async (req, res) => {
     try {
         // Corregimos el filtro a 'pendiente' en minúsculas y ordenamos por fecha_solicitud
         const querySelect = `
-            SELECT id, probador_id, estado, fecha_solicitud 
+            SELECT id, probador_id, estado, atendido_por, fecha_solicitud, nota
             FROM asistencia_probadores 
-            WHERE estado = 'pendiente' 
+            WHERE estado IN ('pendiente', 'recibido', 'atendido') 
             ORDER BY fecha_solicitud DESC;
         `;
         const result = await pool.query(querySelect);
@@ -642,6 +622,21 @@ router.put('/asistencia/atender/:id', async (req, res) => {
         res.status(500).json({ error: "No se pudo actualizar el estado del probador." });
     }
 });
+router.put('/asistencia/recibir/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const queryUpdate = `
+            UPDATE asistencia_probadores 
+            SET estado = 'recibido' 
+            WHERE id = $1;
+        `;
+        await pool.query(queryUpdate, [parseInt(id)]);
+        res.status(200).json({ ok: true, message: "Llamada marcada como recibida por el asesor." });
+    } catch (error) {
+        console.error('Error en PUT /asistencia/recibir:', error);
+        res.status(500).json({ error: "No se pudo actualizar a estado recibido." });
+    }
+});
 router.post('/wishlist', async (req, res) => {
     const { usuario_id, producto_id } = req.body;
     try {
@@ -649,7 +644,6 @@ router.post('/wishlist', async (req, res) => {
         res.status(201).json({ message: 'Prenda añadida a tus deseos ❤️' });
     } catch (error) { res.status(500).json({ error: 'Error al guardar en tu lista de deseos' }); }
 });
-// ====== RUTA: POST http://34.219.103.28:3000/api/productos/registrar-venta ======
 router.post('/registrar-venta', verificarToken, async (req, res) => {
     // 1. Desestructuramos las variables enviadas por el Frontend
     const { total, descuento_aplicado, usuario_id, carrito, descuento_id } = req.body; 

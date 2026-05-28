@@ -163,9 +163,34 @@ const VendedorDashboard = () => {
     };
 
     const handleAtenderProbador = async (id) => {
-        setAsistencias(asistencias.filter(as => as.id !== id));
-        Swal.fire('🔔 Probadores', 'Asistencia marcada como completada.', 'success');
-    };
+    try {
+        const res = await fetch(`http://34.219.103.28:3000/api/productos/asistencia/atender/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({ usuario_id: 4 }) // Mandamos el ID de Sherlyn u operador activo
+        });
+        if (res.ok) {
+            Swal.fire('✓ Finalizado', 'Asistencia completada con éxito en la base de datos.', 'success');
+            sincronizarVendedor();
+        }
+    } catch (err) {
+        console.error(err);
+    }
+};
+    const handleRecibirProbador = async (id) => {
+    try {
+        const res = await fetch(`http://34.219.103.28:3000/api/productos/asistencia/recibir/${id}`, {
+            method: 'PUT',
+            headers: { ...getAuthHeaders() }
+        });
+        if (res.ok) {
+            Swal.fire('📩 Recibido', 'Le hemos notificado al cliente que vas en camino.', 'info');
+            sincronizarVendedor();
+        }
+    } catch (err) {
+        console.error(err);
+    }
+};
 
     const styles = {
         mainContainer: { borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' },
@@ -427,17 +452,62 @@ const VendedorDashboard = () => {
                         {asistencias.length === 0 ? (
                             <Alert variant="light" className="text-center border text-muted py-4 fs-5">No hay llamadas de probadores activas en este momento. 👍</Alert>
                         ) : (
-                            asistencias.map((as, i) => (
-                                <Alert variant="danger" key={i} className="d-flex justify-content-between align-items-center shadow-sm border-0 bg-opacity-10 py-3" style={{ backgroundColor: '#fff5f5', borderLeft: '6px solid #e91e63', fontSize: '1.15rem' }}>
-                                    <div className="text-dark">
-                                        🔥 <b>Llamada Urgente:</b> Cabina <b className="fs-4 text-danger">{as.probador_id}</b> está soliciting un asesor.<br/>
-                                        <small className="text-muted fs-6">Estado: <Badge bg="warning" className="fs-7">{as.estado}</Badge> | Hora: {as.fecha_solicitud ? new Date(as.fecha_solicitud).toLocaleTimeString() : 'Ahora'}</small>
-                                    </div>
-                                    <Button size="md" variant="danger" style={{ backgroundColor: '#e91e63', border: 'none' }} className="fw-bold px-3" onClick={() => handleAtenderProbador(as.id)}>
-                                        Marcar Atendido ✓
-                                    </Button>
-                                </Alert>
-                            ))
+                            asistencias.map((as, i) => {
+                                const esAtendido = as.estado === 'atendido';
+
+                                // Definimos los estilos en línea dinámicos para el estado verde suave
+                                const alertStyle = {
+                                    backgroundColor: esAtendido ? '#e8f5e9' : '#fff5f5', 
+                                    borderLeft: esAtendido ? '6px solid #a5d6a7' : '6px solid #e91e63',
+                                    fontSize: '1.15rem',
+                                    opacity: esAtendido ? 0.8 : 1 // Efecto visual deshabilitado sutil
+                                };
+
+                                return (
+                                    <Alert 
+                                        key={i} 
+                                        className="d-flex justify-content-between align-items-center shadow-sm border-0 py-3" 
+                                        style={alertStyle}
+                                    >
+                                        <div className="text-dark">
+                                            🔥 <b>Llamada Urgente:</b> Cabina <b className={esAtendido ? "fs-4 text-success" : "fs-4 text-danger"}>{as.probador_id}</b> {esAtendido ? 'fue atendida con éxito.' : 'está solicitando un asesor.'}
+                                            <br/>
+                                            {/* 💬 Renderizado dinámico del mensaje enviado por el cliente */}
+                                            <small className="text-muted fs-6 d-block my-1">
+                                                📂 Mensaje: "{as.nota || 'Sin nota adjunta.'}"
+                                            </small>
+                                            <small className="text-muted fs-6">
+                                                Estado: {' '}
+                                                <Badge bg={as.estado === 'pendiente' ? 'danger' : as.estado === 'recibido' ? 'warning' : 'success'}>
+                                                    {as.estado.toUpperCase()}
+                                                </Badge>
+                                                {' '} | Hora: {as.fecha_solicitud ? new Date(as.fecha_solicitud).toLocaleTimeString() : 'Ahora'}
+                                            </small>
+                                        </div>
+
+                                        <div className="d-flex gap-2">
+                                            <Button 
+                                                size="md" 
+                                                variant="warning" 
+                                                className="fw-bold px-3 text-dark" 
+                                                onClick={() => handleRecibirProbador(as.id)}
+                                                disabled={as.estado !== 'pendiente'}
+                                            >
+                                                {as.estado === 'pendiente' ? '📩 Marcar Recibido' : 'Recibido'}
+                                            </Button>
+                                            <Button 
+                                                size="md" 
+                                                variant="success" 
+                                                className="fw-bold px-3 text-white" 
+                                                onClick={() => handleAtenderProbador(as.id)}
+                                                disabled={esAtendido}
+                                            >
+                                                {esAtendido ? 'Atendido ✓' : 'Marcar Atendido ✓'}
+                                            </Button>
+                                        </div>
+                                    </Alert>
+                                );
+                            })
                         )}
                     </div>
                 )}
