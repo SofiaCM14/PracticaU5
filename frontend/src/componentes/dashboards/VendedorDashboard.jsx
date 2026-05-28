@@ -22,6 +22,9 @@ const VendedorDashboard = () => {
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [supervisorIdInput, setSupervisorIdInput] = useState('');
 
+    // 🚛 ESTADO DE IMAGEN EXCLUSIVO PARA RECEPCIÓN DE MERCANCÍA VENDEDOR
+    const [nuevaPrendaImagen, setNuevaPrendaImagen] = useState('');
+
     const usuarioActivo = localStorage.getItem('username') || 'sherlyn';
     const rolActivo = localStorage.getItem('userRole') || 'vendedor';
 
@@ -64,6 +67,18 @@ const VendedorDashboard = () => {
     };
 
     useEffect(() => { sincronizarVendedor(); }, []);
+
+    // 🔄 LÓGICA DE TRANSFORMACIÓN DE IMAGEN A BASE64 PARA LA NUEVA MERCANCÍA
+    const handleFileChangeVendedor = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setNuevaPrendaImagen(String(reader.result));
+            };
+            reader.readAsDataURL(file);
+        }
+    };
 
     // 🔒 PROCESAR EL BYPASS DE AUTORIZACIÓN DINÁMICA
     const handleVerificarAutorizacion = async (e) => {
@@ -162,7 +177,7 @@ const VendedorDashboard = () => {
 
     return (
         <div className="w-100 px-1" style={styles.mainContainer}>
-            {/* BANNER DE BIENVENIDA ASESOR (LETRA MÁS GRANDE) */}
+            {/* BANNER DE BIENVENIDA ASESOR */}
             <header style={styles.headerSection}>
                 <Row className="text-center align-items-center m-0 w-100">
                     <Col className="p-0">
@@ -173,13 +188,19 @@ const VendedorDashboard = () => {
                 </Row>
             </header>
 
-            {/* MENÚ DE OPCIONES ADAPTATIVO (FUENTES MÁS ROBUSTAS) */}
-            <nav className="d-flex justify-content-center align-items-center gap-3 my-3 p-2 bg-light rounded shadow-sm mx-auto" style={{ maxWidth: '95%' }}>                
+            {/* MENÚ DE OPCIONES ADAPTATIVO CON RECEPCIÓN AGREGADO */}
+            <nav className="d-flex justify-content-center align-items-center flex-wrap gap-3 my-3 p-2 bg-light rounded shadow-sm mx-auto" style={{ maxWidth: '95%' }}>                
                 <button 
                     style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'inventario' ? '#e91e63' : '#fff', color: vistaActiva === 'inventario' ? '#fff' : '#e91e63' }} 
                     onClick={() => { setVistaActiva('inventario'); sincronizarVendedor(); }}
                 >
                     👗 Catálogo de Prendas
+                </button>
+                <button 
+                    style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'mercancia' ? '#e91e63' : '#fff', color: vistaActiva === 'mercancia' ? '#fff' : '#e91e63' }} 
+                    onClick={() => { setVistaActiva('mercancia'); setNuevaPrendaImagen(''); }}
+                >
+                    🚛 Recepción de Mercancía
                 </button>
                 <button 
                     style={{ ...styles.menuBtn, backgroundColor: vistaActiva === 'probadores' ? '#e91e63' : '#fff', color: vistaActiva === 'probadores' ? '#fff' : '#e91e63' }} 
@@ -213,10 +234,10 @@ const VendedorDashboard = () => {
                 {/* VISTA A: CONSULTAR PRENDAS HORIZONTAL CON LETRA GRANDE */}
                 {vistaActiva === 'inventario' && (
                     <div>
-                        <h4 className="fw-bold mb-4" style={{ color: '#ad1457' }}>👗 Prendas en existencia</h4>
-                        <Row className="g-4">
+                        <h4 className="fw-bold mb-4" style={{ color: '#e91e63' }}>👗 Prendas en Existencia</h4>
+                        <Row className="g-3">
                             {productos.map((p, i) => {
-                                const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23ad1457' text-anchor='middle'>Prenda SmartBoutique</text></svg>";
+                                const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23e91e63' text-anchor='middle'>Prenda SmartBoutique</text></svg>";
                                 const tagsArray = p.tags && Array.isArray(p.tags) ? p.tags : [];
                                 let imagenSrc = fallbackImg; 
 
@@ -231,72 +252,39 @@ const VendedorDashboard = () => {
                                 }
 
                                 return (
-                                    /* Regresamos a Col md={4} para que se organicen en cuadrícula vertical clásica */
-                                    <Col md={12} lg={4} key={i}>
-                                        <Card style={styles.cardBoutique} className="shadow-sm h-100 border-0 overflow-hidden bg-white">
-                                            
-                                            {/* 🖼️ IMAGEN ARRIBA (Formato Vertical Clásico) */}
-                                            <div 
-                                                className="d-flex justify-content-center align-items-center bg-light p-3" 
-                                                style={{ 
-                                                    height: '260px', 
-                                                    overflow: 'hidden',
-                                                    backgroundColor: '#fffdfd',
-                                                    borderBottom: '1px solid #f8bbd0'
-                                                }}
-                                            >
-                                                <Card.Img 
-                                                    variant="top" 
-                                                    src={imagenSrc} 
-                                                    style={{ 
-                                                        maxHeight: '100%', 
-                                                        maxWidth: '100%', 
-                                                        width: 'auto', 
-                                                        height: 'auto', 
-                                                        objectFit: 'contain' 
-                                                    }} 
-                                                    onError={(e) => { e.target.src = fallbackImg; }}
-                                                />
-                                            </div>
+                                    <Col md={12} lg={6} key={i}>
+                                        <Card style={styles.cardBoutique} className="shadow-sm h-100 overflow-hidden">
+                                            <Row className="g-0 h-100">
+                                                
+                                                {/* LADO IZQUIERDO: DETALLES TEXTUALES */}
+                                                <Col xs={7} className="d-flex flex-column justify-content-between p-3">
+                                                    <div>
+                                                        <div className="d-flex justify-content-between align-items-center mb-2">
+                                                            <span className="text-muted fw-bold text-uppercase" style={{ fontSize: '0.95rem', letterSpacing: '0.5px' }}>{p.categoria || 'Moda'}</span>
+                                                            <Badge bg="light" text="dark" className="border fs-6">ID: #{p.id}</Badge>
+                                                        </div>
+                                                        
+                                                        <Card.Title className="fw-bold text-dark fs-4 mb-2">
+                                                            {p.nombre}
+                                                        </Card.Title>
+                                                        
+                                                        <Card.Text className="text-muted mb-3" style={{ fontSize: '1rem', minHeight: '44px', lineHeight: '1.4' }}>
+                                                            {p.descripcion || 'Sin descripción asignada todavía.'}
+                                                        </Card.Text>
 
-                                            {/* 📝 TEXTOS ABAJO CON FUENTE PREMIUM GRANDE */}
-                                            <Card.Body className="d-flex flex-column justify-content-between p-3" style={{ fontSize: '1.05rem' }}>
-                                                <div>
-                                                    <div className="d-flex justify-content-between align-items-center mb-2">
-                                                        <span className="text-muted fw-bold text-uppercase" style={{ fontSize: '0.9rem', letterSpacing: '0.5px' }}>
-                                                            {p.categoria || 'Moda'}
-                                                        </span>
-                                                        <Badge bg="light" text="dark" className="border fs-6">ID: #{p.id}</Badge>
+                                                        <div className="d-flex flex-wrap gap-2 mb-2">
+                                                            <Badge bg="dark" className="p-2 fs-6">Talla: {p.talla || 'M'}</Badge>
+                                                            <Badge bg="secondary" className="p-2 fs-6">Color: {p.color || 'Unicolor'}</Badge>
+                                                            <Badge bg={p.stock > 5 ? 'success' : 'danger'} className="p-2 fs-6">Stock: {p.stock} pz</Badge>
+                                                        </div>
                                                     </div>
-                                                    
-                                                    <Card.Title className="fw-bold text-dark fs-4 mb-2">
-                                                        {p.nombre}
-                                                    </Card.Title>
-                                                    
-                                                    <Card.Text className="text-muted mb-3" style={{ fontSize: '1rem', minHeight: '44px', lineHeight: '1.4' }}>
-                                                        {p.descripcion || 'Sin descripción asignada todavía.'}
-                                                    </Card.Text>
 
-                                                    {/* Especificaciones Técnicas (Badges Grandes) */}
-                                                    <div className="d-flex flex-wrap gap-2 mb-3">
-                                                        <Badge bg="dark" className="p-2 fs-6">Talla: {p.talla || 'M'}</Badge>
-                                                        <Badge bg="secondary" className="p-2 fs-6">Color: {p.color || 'Unicolor'}</Badge>
-                                                        <Badge bg={p.stock > 10 ? 'success' : 'danger'} className="p-2 fs-6">Stock: {p.stock} pz</Badge>
-                                                    </div>
-                                                </div>
-
-                                                {/* Bloque Inferior: Etiquetas, Precio y Botón de Actualizar Grande */}
-                                                <div className="mt-3">
-                                                    <div className="d-flex justify-content-between align-items-center mb-3">
-                                                        {/* Tags del producto */}
+                                                    <div className="d-flex justify-content-between align-items-end mt-3">
                                                         <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '60%' }}>
                                                             {tagsArray.map((t, idx) => (
                                                                 <Badge key={idx} bg="light" text="secondary" className="border p-1" style={{ fontSize: '0.85rem' }}>#{t}</Badge>
                                                             ))}
-                                                            {tagsArray.length === 0 && <Badge bg="light" text="secondary" className="border p-1" style={{ fontSize: '0.85rem' }}>#prenda</Badge>}
                                                         </div>
-                                                        
-                                                        {/* Precio Piso */}
                                                         <div className="text-end">
                                                             <span className="d-block text-muted fw-bold" style={{ fontSize: '0.75rem' }}>PRECIO PISO</span>
                                                             <h3 className="fw-bold text-danger m-0 font-monospace" style={{ fontSize: '1.8rem' }}>
@@ -304,19 +292,20 @@ const VendedorDashboard = () => {
                                                             </h3>
                                                         </div>
                                                     </div>
+                                                </Col>
 
-                                                    {/* ⚙️ BOTÓN DE ACTUALIZAR GRANDE (Ocupa todo el ancho abajo para mayor comodidad) */}
-                                                    <Button 
-                                                        size="lg"
-                                                        style={{ backgroundColor: '#ad1457', border: 'none', borderRadius: '10px' }} 
-                                                        className="w-100 fw-bold py-2 text-white shadow-sm mt-2 d-flex align-items-center justify-content-center gap-2"
-                                                        onClick={() => abrirFormularioProducto(p)}
-                                                    >
-                                                        ⚙️ Actualizar Prenda
-                                                    </Button>
-                                                </div>
-                                            </Card.Body>
+                                                {/* LADO DERECHO: FOTOGRAFÍA COMODA */}
+                                                <Col xs={5} className="d-flex align-items-center justify-content-center bg-light border-start" style={{ borderColor: '#f8bbd0' }}>
+                                                    <div className="w-100 d-flex justify-content-center align-items-center p-2" style={{ height: '100%', minHeight: '230px', backgroundColor: '#fffdfd' }}>
+                                                        <Card.Img 
+                                                            src={imagenSrc} 
+                                                            style={{ maxHeight: '210px', maxWidth: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }} 
+                                                            onError={(e) => { e.target.src = fallbackImg; }}
+                                                        />
+                                                    </div>
+                                                </Col>
 
+                                            </Row>
                                         </Card>
                                     </Col>
                                 );
@@ -325,7 +314,113 @@ const VendedorDashboard = () => {
                     </div>
                 )}
 
-                {/* VISTA B: PROBADORES CON FUENTE ROBUSTA */}
+                {/* 🚛 NUEVA VISTA EXTRA: RECEPCIÓN DE MERCANCÍA PARA EL VENDEDOR (LETRA GRANDE) */}
+                {vistaActiva === 'mercancia' && (
+                    <div
+                        className="mx-auto animate__animated animate__fadeIn"
+                        style={{
+                            maxWidth: '900px',
+                            background: '#e68fbf',
+                            borderRadius: '18px',
+                            padding: '35px',
+                            border: '1px solid #f8bbd0',
+                            boxShadow: '0 4px 18px rgba(0,0,0,0.05)',
+                            fontSize: '1.05rem'
+                        }}
+                    >
+                        <div className="mb-4 text-center pb-2 border-bottom">
+                            <h3 className="fw-bold mb-1" style={{ color: '#ad1457' }}>Agregar Nueva Prenda</h3>
+                        </div>
+
+                        <Form onSubmit={async (e) => {
+                            e.preventDefault();
+                            const form = e.target;
+                            
+                            const tagsInput = form.tags.value;
+                            const tagsArray = tagsInput ? tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag !== '') : ['nueva_temporada'];
+
+                            try {
+                                const response = await fetch('http://34.219.103.28:3000/api/productos', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                                    body: JSON.stringify({
+                                        nombre: form.nombre.value,
+                                        precio: parseFloat(form.precio.value),
+                                        stock: parseInt(form.stock.value),
+                                        talla: form.talla.value,
+                                        color: form.color.value,
+                                        categoria: form.categoria.value,
+                                        descripcion: form.descripcion.value,
+                                        imagen_url: nuevaPrendaImagen,
+                                        tags: tagsArray,
+                                        usuario: usuarioActivo,
+                                        rol: rolActivo
+                                    })
+                                });
+                                
+                                if (response.ok) {
+                                    Swal.fire('¡Mercancía Inyectada!', `Prenda registrada con éxito en el inventario global cloud.`, 'success');
+                                    form.reset();
+                                    setNuevaPrendaImagen('');
+                                    sincronizarVendedor();
+                                } else {
+                                    Swal.fire('⚠️ Servidor', 'No se pudo guardar la prenda. Revisa la red.', 'error');
+                                }
+                            } catch (err) { 
+                                console.error(err);
+                                Swal.fire('❌ Error', 'Error de comunicación con AWS RDS.', 'error'); 
+                            }
+                        }}>
+                            <Row className="g-3 mb-3">
+                                <Col md={6}>
+                                    <Form.Group>
+                                        <Form.Label className="fw-bold text-muted">Nombre del Artículo</Form.Label>
+                                        <Form.Control type="text" name="nombre" required placeholder="Ej: Vestido Gala Satinado" className="form-control-lg" />
+                                    </Form.Group>
+                                </Col>
+                                <Col md={3}><Form.Group><Form.Label className="fw-bold text-muted">Precio Venta ($)</Form.Label><Form.Control type="number" step="0.01" name="precio" required className="form-control-lg text-center" /></Form.Group></Col>
+                                <Col md={3}><Form.Group><Form.Label className="fw-bold text-muted">Cantidad Inicial</Form.Label><Form.Control type="number" name="stock" required className="form-control-lg text-center" /></Form.Group></Col>
+                            </Row>
+
+                            <Row className="g-3 mb-3">
+                                <Col md={4}>
+                                    <Form.Group>
+                                        <Form.Label className="fw-bold text-muted">Talla Base</Form.Label>
+                                        <Form.Select name="talla" className="form-select-lg"><option value="S">S</option><option value="M">M</option><option value="L">L</option></Form.Select>
+                                    </Form.Group>
+                                </Col>
+                                <Col md={4}><Form.Group><Form.Label className="fw-bold text-muted">Color Temático</Form.Label><Form.Control type="text" name="color" placeholder="Negro, Arena..." required className="form-control-lg" /></Form.Group></Col>
+                                <Col md={4}><Form.Group><Form.Label className="fw-bold text-muted">Categoría en Tienda</Form.Label><Form.Control type="text" name="categoria" placeholder="Pantalones, Tops..." required className="form-control-lg" /></Form.Group></Col>
+                            </Row>
+
+                            <Form.Group className="mb-3">
+                                <Form.Label className="fw-bold text-muted">Fotografía de la Prenda (Conversión automática)</Form.Label>
+                                <Form.Control type="file" accept="image/*" onChange={handleFileChangeVendedor} className="form-control-lg" />
+                                {nuevaPrendaImagen && (
+                                    <div className="mt-3 text-center bg-light p-2 rounded border">
+                                        <img src={nuevaPrendaImagen} alt="Vista previa" style={{ height: '140px', borderRadius: '8px', objectFit: 'contain' }} />
+                                    </div>
+                                )}
+                            </Form.Group>
+
+                            <Form.Group className="mb-3">
+                                <Form.Label className="fw-bold text-muted">Etiquetas (`tags` - Separados por comas)</Form.Label>
+                                <Form.Control type="text" name="tags" placeholder="lino, fresco, playa" className="form-control-lg" />
+                            </Form.Group>
+
+                            <Form.Group className="mb-4">
+                                <Form.Label className="fw-bold text-muted">Descripción Corta</Form.Label>
+                                <Form.Control as="textarea" rows={2} name="descripcion" placeholder="Detalles de composición o corte..." className="form-control-lg" />
+                            </Form.Group>
+
+                            <Button type="submit" className="w-100 fw-bold py-3 text-white shadow" style={{ backgroundColor: '#ad1457', border: 'none', borderRadius: '10px', fontSize: '1.15rem' }}>
+                                📦 Guardar Nuevo Producto.
+                            </Button>
+                        </Form>
+                    </div>
+                )}
+
+                {/* VISTA B: PROBADORES */}
                 {vistaActiva === 'probadores' && (
                     <div>
                         <h4 className="fw-bold mb-4" style={{ color: '#e91e63' }}>🚨 Solicitudes de Asistencia en Probadores</h4>
@@ -335,7 +430,7 @@ const VendedorDashboard = () => {
                             asistencias.map((as, i) => (
                                 <Alert variant="danger" key={i} className="d-flex justify-content-between align-items-center shadow-sm border-0 bg-opacity-10 py-3" style={{ backgroundColor: '#fff5f5', borderLeft: '6px solid #e91e63', fontSize: '1.15rem' }}>
                                     <div className="text-dark">
-                                        🔥 <b>Llamada Urgente:</b> Cabina <b className="fs-4 text-danger">{as.probador_id}</b> está solicitando un asesor.<br/>
+                                        🔥 <b>Llamada Urgente:</b> Cabina <b className="fs-4 text-danger">{as.probador_id}</b> está soliciting un asesor.<br/>
                                         <small className="text-muted fs-6">Estado: <Badge bg="warning" className="fs-7">{as.estado}</Badge> | Hora: {as.fecha_solicitud ? new Date(as.fecha_solicitud).toLocaleTimeString() : 'Ahora'}</small>
                                     </div>
                                     <Button size="md" variant="danger" style={{ backgroundColor: '#e91e63', border: 'none' }} className="fw-bold px-3" onClick={() => handleAtenderProbador(as.id)}>
@@ -347,7 +442,7 @@ const VendedorDashboard = () => {
                     </div>
                 )}
 
-                {/* VISTA C: TABLA DE DESCUENTOS CON TIPOGRAFÍA GRANDE */}
+                {/* VISTA C: TABLA DE DESCUENTOS */}
                 {vistaActiva === 'descuentos' && (
                     <div>
                         <h4 className="fw-bold mb-4" style={{ color: '#e91e63' }}>🎟️ Lista de Descuentos Oficiales Configurados</h4>
@@ -369,7 +464,7 @@ const VendedorDashboard = () => {
                     </div>
                 )}
 
-                {/* VISTA D: TERMINAL VENTAS CON CONTROLES GRANDES (POS TOUCH-LEGIBLE) */}
+                {/* VISTA D: TERMINAL VENTAS */}
                 {vistaActiva === 'ventas' && (
                     <div className="animate__animated animate__fadeIn" style={{ fontSize: '1.05rem' }}>
                         <h4 className="fw-bold mb-3" style={{ color: '#e91e63' }}>🛒 Módulo de Cobro</h4>
@@ -406,7 +501,7 @@ const VendedorDashboard = () => {
                                     <Button type="button" variant="dark" className="w-100 fw-bold py-2 btn-lg shadow-sm fs-6" onClick={() => setShowAuthModal(true)}>
                                         🔑 Autorizar
                                     </Button>
-                                )}
+                                ) }
                             </Col>
                             
                             <Col md={3}>
@@ -416,7 +511,6 @@ const VendedorDashboard = () => {
                             </Col>
                         </Form>
 
-                        {/* HISTORIAL DE VENTAS CON LETRAS AMPLIADAS */}
                         <h4 className="fw-bold mb-3 mt-4" style={{ color: '#e91e63' }}>💰 Mis Ventas</h4>
                         <Table responsive hover className="text-center align-middle mb-0 table-borderless border" style={{ fontSize: '1.1rem' }}>
                             <thead className="table-light">
@@ -441,7 +535,7 @@ const VendedorDashboard = () => {
                 )}
             </div>
 
-            {/* ====== MODAL INTERACTIVO: CAPTURA DE ID DE SUPERVISOR ====== */}
+            {/* ====== MODAL INTERACTIVO: ID SUPERVISOR ====== */}
             <Modal show={showAuthModal} onHide={() => setShowAuthModal(false)} centered size="sm">
                 <Modal.Header closeButton className="border-0 pb-0">
                     <Modal.Title className="fw-bold text-dark fs-5">🔒 Llave de Supervisor</Modal.Title>
