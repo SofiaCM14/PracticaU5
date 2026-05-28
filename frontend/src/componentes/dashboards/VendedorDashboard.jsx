@@ -213,10 +213,10 @@ const VendedorDashboard = () => {
                 {/* VISTA A: CONSULTAR PRENDAS HORIZONTAL CON LETRA GRANDE */}
                 {vistaActiva === 'inventario' && (
                     <div>
-                        <h4 className="fw-bold mb-4" style={{ color: '#e91e63' }}>👗 Prendas en Existencia</h4>
-                        <Row className="g-3">
+                        <h4 className="fw-bold mb-4" style={{ color: '#ad1457' }}>👗 Prendas en existencia</h4>
+                        <Row className="g-4">
                             {productos.map((p, i) => {
-                                const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23e91e63' text-anchor='middle'>Prenda SmartBoutique</text></svg>";
+                                const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23ad1457' text-anchor='middle'>Prenda SmartBoutique</text></svg>";
                                 const tagsArray = p.tags && Array.isArray(p.tags) ? p.tags : [];
                                 let imagenSrc = fallbackImg; 
 
@@ -231,40 +231,72 @@ const VendedorDashboard = () => {
                                 }
 
                                 return (
-                                    <Col md={12} lg={6} key={i}>
-                                        <Card style={styles.cardBoutique} className="shadow-sm h-100 overflow-hidden">
-                                            <Row className="g-0 h-100">
-                                                
-                                                {/* 👈 LADO IZQUIERDO: DETALLES TEXTUALES CON FONT ENLARGED */}
-                                                <Col xs={7} className="d-flex flex-column justify-content-between p-3">
-                                                    <div>
-                                                        <div className="d-flex justify-content-between align-items-center mb-2">
-                                                            <span className="text-muted fw-bold text-uppercase" style={{ fontSize: '0.95rem', letterSpacing: '0.5px' }}>{p.categoria || 'Moda'}</span>
-                                                            <Badge bg="light" text="dark" className="border fs-6">ID: #{p.id}</Badge>
-                                                        </div>
-                                                        
-                                                        <Card.Title className="fw-bold text-dark fs-4 mb-2">
-                                                            {p.nombre}
-                                                        </Card.Title>
-                                                        
-                                                        <Card.Text className="text-muted mb-3" style={{ fontSize: '1rem', minHeight: '44px', lineHeight: '1.4' }}>
-                                                            {p.descripcion || 'Sin descripción asignada todavía.'}
-                                                        </Card.Text>
+                                    /* Regresamos a Col md={4} para que se organicen en cuadrícula vertical clásica */
+                                    <Col md={12} lg={4} key={i}>
+                                        <Card style={styles.cardBoutique} className="shadow-sm h-100 border-0 overflow-hidden bg-white">
+                                            
+                                            {/* 🖼️ IMAGEN ARRIBA (Formato Vertical Clásico) */}
+                                            <div 
+                                                className="d-flex justify-content-center align-items-center bg-light p-3" 
+                                                style={{ 
+                                                    height: '260px', 
+                                                    overflow: 'hidden',
+                                                    backgroundColor: '#fffdfd',
+                                                    borderBottom: '1px solid #f8bbd0'
+                                                }}
+                                            >
+                                                <Card.Img 
+                                                    variant="top" 
+                                                    src={imagenSrc} 
+                                                    style={{ 
+                                                        maxHeight: '100%', 
+                                                        maxWidth: '100%', 
+                                                        width: 'auto', 
+                                                        height: 'auto', 
+                                                        objectFit: 'contain' 
+                                                    }} 
+                                                    onError={(e) => { e.target.src = fallbackImg; }}
+                                                />
+                                            </div>
 
-                                                        {/* Especificaciones Técnicas (Agrandadas) */}
-                                                        <div className="d-flex flex-wrap gap-2 mb-2">
-                                                            <Badge bg="dark" className="p-2 fs-6">Talla: {p.talla || 'M'}</Badge>
-                                                            <Badge bg="secondary" className="p-2 fs-6">Color: {p.color || 'Unicolor'}</Badge>
-                                                            <Badge bg={p.stock > 5 ? 'success' : 'danger'} className="p-2 fs-6">Stock: {p.stock} pz</Badge>
-                                                        </div>
+                                            {/* 📝 TEXTOS ABAJO CON FUENTE PREMIUM GRANDE */}
+                                            <Card.Body className="d-flex flex-column justify-content-between p-3" style={{ fontSize: '1.05rem' }}>
+                                                <div>
+                                                    <div className="d-flex justify-content-between align-items-center mb-2">
+                                                        <span className="text-muted fw-bold text-uppercase" style={{ fontSize: '0.9rem', letterSpacing: '0.5px' }}>
+                                                            {p.categoria || 'Moda'}
+                                                        </span>
+                                                        <Badge bg="light" text="dark" className="border fs-6">ID: #{p.id}</Badge>
                                                     </div>
+                                                    
+                                                    <Card.Title className="fw-bold text-dark fs-4 mb-2">
+                                                        {p.nombre}
+                                                    </Card.Title>
+                                                    
+                                                    <Card.Text className="text-muted mb-3" style={{ fontSize: '1rem', minHeight: '44px', lineHeight: '1.4' }}>
+                                                        {p.descripcion || 'Sin descripción asignada todavía.'}
+                                                    </Card.Text>
 
-                                                    <div className="d-flex justify-content-between align-items-end mt-3">
+                                                    {/* Especificaciones Técnicas (Badges Grandes) */}
+                                                    <div className="d-flex flex-wrap gap-2 mb-3">
+                                                        <Badge bg="dark" className="p-2 fs-6">Talla: {p.talla || 'M'}</Badge>
+                                                        <Badge bg="secondary" className="p-2 fs-6">Color: {p.color || 'Unicolor'}</Badge>
+                                                        <Badge bg={p.stock > 10 ? 'success' : 'danger'} className="p-2 fs-6">Stock: {p.stock} pz</Badge>
+                                                    </div>
+                                                </div>
+
+                                                {/* Bloque Inferior: Etiquetas, Precio y Botón de Actualizar Grande */}
+                                                <div className="mt-3">
+                                                    <div className="d-flex justify-content-between align-items-center mb-3">
+                                                        {/* Tags del producto */}
                                                         <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '60%' }}>
                                                             {tagsArray.map((t, idx) => (
                                                                 <Badge key={idx} bg="light" text="secondary" className="border p-1" style={{ fontSize: '0.85rem' }}>#{t}</Badge>
                                                             ))}
+                                                            {tagsArray.length === 0 && <Badge bg="light" text="secondary" className="border p-1" style={{ fontSize: '0.85rem' }}>#prenda</Badge>}
                                                         </div>
+                                                        
+                                                        {/* Precio Piso */}
                                                         <div className="text-end">
                                                             <span className="d-block text-muted fw-bold" style={{ fontSize: '0.75rem' }}>PRECIO PISO</span>
                                                             <h3 className="fw-bold text-danger m-0 font-monospace" style={{ fontSize: '1.8rem' }}>
@@ -272,29 +304,19 @@ const VendedorDashboard = () => {
                                                             </h3>
                                                         </div>
                                                     </div>
-                                                </Col>
 
-                                                {/* 👉 LADO DERECHO: FOTOGRAFÍA COMODA */}
-                                                <Col xs={5} className="d-flex align-items-center justify-content-center bg-light border-start" style={{ borderColor: '#f8bbd0' }}>
-                                                    <div 
-                                                        className="w-100 d-flex justify-content-center align-items-center p-2" 
-                                                        style={{ height: '100%', minHeight: '230px', backgroundColor: '#fffdfd' }}
+                                                    {/* ⚙️ BOTÓN DE ACTUALIZAR GRANDE (Ocupa todo el ancho abajo para mayor comodidad) */}
+                                                    <Button 
+                                                        size="lg"
+                                                        style={{ backgroundColor: '#ad1457', border: 'none', borderRadius: '10px' }} 
+                                                        className="w-100 fw-bold py-2 text-white shadow-sm mt-2 d-flex align-items-center justify-content-center gap-2"
+                                                        onClick={() => abrirFormularioProducto(p)}
                                                     >
-                                                        <Card.Img 
-                                                            src={imagenSrc} 
-                                                            style={{ 
-                                                                maxHeight: '210px', 
-                                                                maxWidth: '100%', 
-                                                                width: 'auto', 
-                                                                height: 'auto',
-                                                                objectFit: 'contain' 
-                                                            }} 
-                                                            onError={(e) => { e.target.src = fallbackImg; }}
-                                                        />
-                                                    </div>
-                                                </Col>
+                                                        ⚙️ Actualizar Prenda
+                                                    </Button>
+                                                </div>
+                                            </Card.Body>
 
-                                            </Row>
                                         </Card>
                                     </Col>
                                 );
