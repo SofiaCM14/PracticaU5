@@ -94,7 +94,7 @@ router.get('/auditoria', async (req, res) => {
 // 🔒 CONSULTAR USUARIOS (Solo Gerente)
 router.get('/usuarios', verificarToken, esGerente, async (req, res) => {
     try {
-        const result = await pool.query('SELECT id, username, rol FROM usuarios ORDER BY id ASC;');
+        const result = await pool.query('SELECT id, username, rol, password FROM usuarios ORDER BY id ASC;');
         res.json(result.rows);
     } catch (error) {
         console.error('Error al consultar usuarios:', error);
