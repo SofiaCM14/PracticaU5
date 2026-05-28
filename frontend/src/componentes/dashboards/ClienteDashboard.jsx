@@ -70,6 +70,17 @@ const ClienteDashboard = () => {
             });
 
             if (res.ok) {
+                const nuevaAlertaLocal = {
+                id: Date.now(), // ID temporal para evitar errores de llave en el ciclo map
+                probador_id: probadorSeleccionado,
+                nota: notaAsistencia,
+                estado: 'pendiente',
+                fecha_solicitud: new Date().toISOString(),
+                usuario_id: usuarioIdReal
+            };
+
+            setAsistencias([nuevaAlertaLocal, ...asistencias]);
+            
                 Swal.fire({
                     title: '¡Alerta Enviada! 🔔',
                     text: `El asesor de piso ha recibido la notificación de la Cabina ${probadorSeleccionado}. Ya va en camino.`,
