@@ -346,11 +346,11 @@ const VendedorDashboard = () => {
 
                                     return (
                                         <Col xs={12} sm={6} md={4} lg={3} xl={2} key={i} className="d-flex">
-                                            <Card style={styles.cardBoutique} className="shadow-sm border-0 w-100 d-flex flex-column rounded-4 bg-white overflow-hidden">
-                                                <div className="d-flex justify-content-center align-items-center p-2 bg-light" style={{ height: '170px', overflow: 'hidden' }}>
+                                            <Card style={styles.cardBoutique} className="shadow-sm border-0 w-100 h-100 d-flex flex-column rounded-4 bg-white overflow-hidden">
+                                                <div className="d-flex justify-content-center align-items-center p-2 bg-light" style={{ height: '170px', overflow: 'hidden', backgroundColor: '#fffdfd', borderBottom: '1px solid #f8bbd0' }}>
                                                     <Card.Img variant="top" src={imagenSrc} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} onError={(e) => { e.target.src = fallbackImg; }} />
                                                 </div>
-                                                <Card.Body className="d-flex flex-column justify-content-between p-2" style={{ fontSize: '0.95rem' }}>
+                                                <Card.Body className="d-flex flex-column justify-content-between p-3" style={{ fontSize: '0.95rem' }}>
                                                     <div>
                                                         <div className="d-flex justify-content-between align-items-center mb-1">
                                                             <span className="text-muted small fw-bold text-uppercase">{p.categoria || 'Moda'}</span>
@@ -371,7 +371,6 @@ const VendedorDashboard = () => {
                                                             </div>
                                                             <h5 className="fw-bold text-danger m-0 font-monospace">${parseFloat(p.precio || 0).toFixed(2)}</h5>
                                                         </div>
-                                                        
                                                     </div>
                                                 </Card.Body>
                                             </Card>

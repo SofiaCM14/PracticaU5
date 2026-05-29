@@ -56,6 +56,8 @@ const EncargadoDashboard = () => {
 
     const usuarioActivo = localStorage.getItem('username') || 'lesly';
     const rolActivo = localStorage.getItem('userRole') || 'encargado';
+    const usuarioId = localStorage.getItem('userId') ? parseInt(localStorage.getItem('userId')) : 3;
+    const cajaActiva = movimientosCajaData.find((c) => c.estado === 'abierta') || movimientosCajaData[0] || null;
     const navigate = useNavigate();
 
     const handleLogout = () => {
@@ -168,7 +170,7 @@ const EncargadoDashboard = () => {
         const datosVenta = {
             total: totalCobradoFinal,
             descuento_aplicado: totalDineroDescontado, 
-            usuario_id: 3, 
+            usuario_id: usuarioId, 
             carrito: [{ producto_id: productoExiste.id, cantidad: parseInt(cantidadVenta), precio_unitario: precioConDescuento }]
         };
 
@@ -206,6 +208,46 @@ const EncargadoDashboard = () => {
                 setShowTicketModal(true);
             }
         } catch (error) { console.error(error); }
+    };
+
+    const handleImprimirTicketVenta = () => {
+        if (!detallesTicket || detallesTicket.length === 0) return;
+        const totalNeto = detallesTicket.reduce((acc, item) => acc + (item.cantidad * parseFloat(item.precio_unitario)), 0).toFixed(2);
+        const fecha = new Date().toLocaleString('es-MX');
+        const ventana = window.open('', '_blank', 'width=520,height=780,scrollbars=yes');
+        ventana.document.write(`
+            <html>
+            <head>
+                <title>Ticket de Venta - #V-${folioSeleccionado}</title>
+                <style>
+                    body { font-family: 'Courier New', monospace; width: 360px; margin: 0 auto; padding: 20px; font-size: 13px; color: #111; }
+                    .text-center { text-align: center; }
+                    .fw-bold { font-weight: bold; }
+                    .linea-divisoria { border-top: 1px dashed #555; margin: 10px 0; }
+                    .flex-justify { display: flex; justify-content: space-between; margin-bottom: 6px; }
+                    .grand-total { font-size: 14px; font-weight: bold; margin-top: 10px; }
+                </style>
+            </head>
+            <body>
+                <div class="text-center">
+                    <h2 style="margin:0;">✨ SmartBoutique ✨</h2>
+                    <p style="margin:4px 0; font-size:12px;">Ticket de Venta</p>
+                </div>
+                <div class="linea-divisoria"></div>
+                <div class="flex-justify"><span>Folio:</span><span>#V-${folioSeleccionado}</span></div>
+                <div class="flex-justify"><span>Usuario:</span><span>${usuarioActivo}</span></div>
+                <div class="flex-justify"><span>Fecha:</span><span>${fecha}</span></div>
+                <div class="linea-divisoria"></div>
+                ${detallesTicket.map(item => `<div class="flex-justify"><span>${item.cantidad}x ${item.nombre_prenda}</span><span>$${(item.cantidad * parseFloat(item.precio_unitario)).toFixed(2)}</span></div>`).join('')}
+                <div class="linea-divisoria"></div>
+                <div class="grand-total flex-justify"><span>Total:</span><span>$${totalNeto}</span></div>
+                <div class="linea-divisoria"></div>
+                <div style="text-align:center; font-size:11px; margin-top:10px;">Gracias por su compra</div>
+                <script>window.print();</script>
+            </body>
+            </html>
+        `);
+        ventana.document.close();
     };
 
     const handleAddProductEncargado = async (e) => {
@@ -291,7 +333,7 @@ const EncargadoDashboard = () => {
             const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/abrir-caja', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                body: JSON.stringify({ usuario_id: 3, monto_inicial: fondoNum })
+                body: JSON.stringify({ usuario_id: usuarioId, monto_inicial: fondoNum })
             });
             if (response.ok) {
                 Swal.fire('¡Turno Abierto!', `Fondo inicial registrado: $${fondoNum.toFixed(2)}`, 'success');
@@ -309,7 +351,7 @@ const EncargadoDashboard = () => {
             if (result.isConfirmed) {
                 const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/cerrar-caja', {
                     method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                    body: JSON.stringify({ usuario_id: 3 }) 
+                    body: JSON.stringify({ usuario_id: usuarioId }) 
                 });
                 const data = await response.json();
                 if (response.ok) {
@@ -592,7 +634,7 @@ const EncargadoDashboard = () => {
                             <Table responsive hover className="text-center align-middle border mt-4">
                                 <thead className="table-light"><tr><th>Folio Dev</th><th>Ticket Orig.</th><th>Prenda</th><th>Cant.</th><th>Motivo</th><th>Reembolso</th><th>Método</th><th>Autorizó</th></tr></thead>
                                 <tbody>
-                                    {devolucionesData.length === 0 ? <tr><td colSpan="8" className="text-muted py-3">No hay devoluciones registradas hoy.</td></tr> : DevolucionesData.map((dev, i) => (
+                                    {devolucionesData.length === 0 ? <tr><td colSpan="8" className="text-muted py-3">No hay devoluciones registradas hoy.</td></tr> : devolucionesData.map((dev, i) => (
                                         <tr key={i}><td>#DEV-{dev.id}</td><td>#V-{dev.venta_id}</td><td className="fw-bold">{dev.producto_detalle}</td><td>{dev.cantidad} pz</td><td>{dev.motivo_devolucion}</td><td className="text-danger fw-bold">-${parseFloat(dev.monto_reembolsado).toFixed(2)}</td><td><Badge bg="secondary">{dev.tipo_reembolso}</Badge></td><td><Badge bg="dark">lesly</Badge></td></tr>
                                     ))}
                                 </tbody>
@@ -651,25 +693,25 @@ const EncargadoDashboard = () => {
                             <div className="col-12 col-md-3">
                                 <div className="p-3 shadow-sm rounded-4 border bg-white d-flex flex-column justify-content-center align-items-center" style={{ height: '100%', minHeight: '140px' }}>
                                     <span className="text-muted fw-bold text-uppercase small">Fondo Apertura</span>
-                                    <h2 className="fw-black my-2 text-primary" style={{ fontSize: '1.8rem' }}>${movimientosCajaData[0]?.estado === 'abierta' ? parseFloat(movimientosCajaData[0].monto_inicial).toFixed(2) : '0.00'}</h2>
-                                    <Badge bg={movimientosCajaData[0]?.estado === 'abierta' ? 'success' : 'secondary'} className="px-3 py-2 fs-7">{movimientosCajaData[0]?.estado === 'abierta' ? 'Turno Activo' : 'Turno Cerrado'}</Badge>
+                                    <h2 className="fw-black my-2 text-primary" style={{ fontSize: '1.8rem' }}>${cajaActiva?.estado === 'abierta' ? parseFloat(cajaActiva.monto_inicial).toFixed(2) : '0.00'}</h2>
+                                    <Badge bg={cajaActiva?.estado === 'abierta' ? 'success' : 'secondary'} className="px-3 py-2 fs-7">{cajaActiva?.estado === 'abierta' ? 'Turno Activo' : 'Turno Cerrado'}</Badge>
                                 </div>
                             </div>
                             <div className="col-12 col-md-4">
-                                {movimientosCajaData[0]?.estado === 'abierta' ? (
+                                {cajaActiva?.estado === 'abierta' ? (
                                     <button onClick={handleCerrarCaja} className="w-100 p-4 shadow border rounded-4 text-white h-100 d-flex flex-column justify-content-center align-items-center" style={{ background: 'linear-gradient(135deg, #d32f2f, #c2185b)', cursor: 'pointer' }}>
                                         <div className="fs-2 mb-1">🔓</div><span className="fw-bold text-uppercase text-white-50 small">Arqueo de Turno</span><h3 className="fw-bold m-0 mt-1" style={{ fontSize: '1.45rem' }}>Realizar Corte de Caja</h3>
                                     </button>
                                 ) : (
                                     <button onClick={() => setShowModalAbrir(true)} className="w-100 p-4 shadow border rounded-4 text-white h-100 d-flex flex-column justify-content-center align-items-center" style={{ background: 'linear-gradient(135deg, #2e7d32, #1b5e20)', cursor: 'pointer' }}>
-                                        <div className="fs-2 mb-1">💵</div><span className="fw-bold text-uppercase text-white-50 small">Turno Inactivo</span><h3 className="fw-bold m-0 mt-1" style={{ fontSize: '1.45rem' }}>Abrir Turno Encargado</h3>
+                                        <div className="fs-2 mb-1">💵</div><span className="fw-bold text-uppercase text-white-50 small">Turno Inactivo</span><h3 className="fw-bold m-0 mt-1" style={{ fontSize: '1.45rem' }}>Abrir Turno</h3>
                                     </button>
                                 )}
                             </div>
                             <div className="col-12 col-md-3">
-                                <button onClick={() => { if(movimientosCajaData.length > 0) { handleImprimirTicketCorte(movimientosCajaData[0]); } }} className="w-100 p-3 shadow-sm border rounded-4 bg-white h-100 d-flex flex-column justify-content-center align-items-center">
+                                <button onClick={() => { if(cajaActiva) { handleImprimirTicketCorte(cajaActiva); } }} className="w-100 p-3 shadow-sm border rounded-4 bg-white h-100 d-flex flex-column justify-content-center align-items-center">
                                     <span className="text-muted fw-bold text-uppercase small">Total en Caja</span>
-                                    <h2 className="fw-black my-2 text-success" style={{ fontSize: '1.8rem' }}>${movimientosCajaData[0] ? (parseFloat(movimientosCajaData[0].monto_final || movimientosCajaData[0].monto_inicial) - parseFloat(movimientosCajaData[0].monto_inicial)).toFixed(2) : '0.00'}</h2>
+                                    <h2 className="fw-black my-2 text-success" style={{ fontSize: '1.8rem' }}>${cajaActiva ? (parseFloat(cajaActiva.monto_final || cajaActiva.monto_inicial) - parseFloat(cajaActiva.monto_inicial)).toFixed(2) : '0.00'}</h2>
                                     <span className="badge bg-dark rounded-pill py-2 px-3 text-uppercase font-monospace fs-7">📄 Imprimir Reporte</span>
                                 </button>
                             </div>
@@ -702,7 +744,7 @@ const EncargadoDashboard = () => {
             <Modal show={showTicketModal} onHide={() => setShowTicketModal(false)} centered size="sm">
                 <Modal.Body className="p-4" style={{ fontFamily: 'Courier New, monospace', backgroundColor: '#ffffff', fontSize: '1.05rem' }}>
                     <div className="d-flex gap-2 justify-content-center mb-4 d-print-none">
-                        <Button variant="success" size="md" className="fw-bold px-4 shadow-sm border-0" style={{ backgroundColor: '#2e7d32' }} onClick={() => window.print()}>🖨️ Imprimir</Button>
+                        <Button variant="success" size="md" className="fw-bold px-4 shadow-sm border-0" style={{ backgroundColor: '#2e7d32' }} onClick={handleImprimirTicketVenta}>🖨️ Imprimir</Button>
                         <Button variant="secondary" size="md" className="fw-bold px-4 shadow-sm border-0" style={{ backgroundColor: '#757575' }} onClick={() => setShowTicketModal(false)}>❌ Cerrar</Button>
                     </div>
                     <div className="text-center mb-3">

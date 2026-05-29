@@ -65,6 +65,8 @@ const AdminDashboard = () => {
 
     const usuarioActivo = localStorage.getItem('username') || 'admin_sofi';
     const rolActivo = localStorage.getItem('userRole') || 'admin';
+    const usuarioId = localStorage.getItem('userId') ? parseInt(localStorage.getItem('userId')) : 1;
+    const cajaActiva = movimientosCajaData.find((c) => c.estado === 'abierta') || movimientosCajaData[0] || null;
 
     const handleLogout = () => {
         try {
@@ -227,6 +229,38 @@ const AdminDashboard = () => {
         }
     };
 
+    const handleRegistroDevolucion = async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        try {
+            const response = await fetch('http://34.219.103.28:3000/api/productos/devoluciones', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                body: JSON.stringify({
+                    venta_id: parseInt(form.venta_id.value),
+                    producto_detalle: form.producto_detalle.value,
+                    cantidad: parseInt(form.cantidad.value),
+                    motivo_devolucion: form.motivo_devolucion.value,
+                    monto_reembolsado: parseFloat(form.monto_reembolsado.value),
+                    tipo_reembolso: form.tipo_reembolso.value,
+                    usuario_id: usuarioId
+                })
+            });
+
+            if (response.ok) {
+                Swal.fire('¡Éxito!', 'La devolución se registró correctamente.', 'success');
+                form.reset();
+                await cargarDatosAdmin(true);
+            } else {
+                const err = await response.json();
+                Swal.fire('❌ Error', err.error || 'No se pudo procesar la devolución.', 'error');
+            }
+        } catch (error) {
+            console.error(error);
+            Swal.fire('❌ Error', 'Error de comunicación con el servidor.', 'error');
+        }
+    };
+
     const handleAddProduct = async (e) => {
         e.preventDefault();
         try {
@@ -343,12 +377,12 @@ const AdminDashboard = () => {
                 const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/cerrar-caja', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                    body: JSON.stringify({ usuario_id: 1 }) 
+                    body: JSON.stringify({ usuario_id: usuarioId })
                 });
                 const data = await response.json();
                 if (response.ok) {
                     Swal.fire({ title: '¡Caja Cerrada!', html: `💰 <b>Ventas:</b> $${data.ventas_del_dia.toFixed(2)}<br/>💵 <b>Total:</b> $${data.monto_final.toFixed(2)}`, icon: 'success' });
-                    cargarDatosAdmin(true); 
+                    cargarDatosAdmin(true);
                 }
             }
         });
@@ -363,12 +397,12 @@ const AdminDashboard = () => {
             const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/abrir-caja', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                body: JSON.stringify({ usuario_id: 1, monto_inicial: fondoNum })
+                body: JSON.stringify({ usuario_id: usuarioId, monto_inicial: fondoNum })
             });
             if (response.ok) {
                 Swal.fire('¡Turno Abierto!', `Fondo de $${fondoNum.toFixed(2)} registrado.`, 'success');
                 setShowModalAbrir(false); setMontoInicialInput('');
-                cargarDatosAdmin(true); 
+                cargarDatosAdmin(true);
             }
         } catch (error) { console.error(error); }
     };
@@ -381,10 +415,82 @@ const AdminDashboard = () => {
             const montoFinal = parseFloat(datosCaja.monto_final) || 0;
             const totalVentas = montoFinal > 0 ? (montoFinal - fondoInicial) : 0;
 
-            const ventanaImpresion = window.open('', '_blank', 'width=420,height=700');
-            ventanaImpresion.document.write(`<html><body><h3>SmartBoutique Corte</h3><hr/><p>Total: $${montoFinal.toFixed(2)}</p></body></html>`);
+            const ventanaImpresion = window.open('', '_blank', 'width=420,height=700,scrollbars=yes');
+            ventanaImpresion.document.write(`
+                <html>
+                <head>
+                    <title>Ticket de Corte - #C-${datosCaja.id}</title>
+                    <style>
+                        body { font-family: 'Courier New', monospace; width: 320px; margin: 0 auto; padding: 20px; font-size: 13px; color: #111; }
+                        .text-center { text-align: center; }
+                        .fw-bold { font-weight: bold; }
+                        .linea-divisoria { border-top: 1px dashed #555; margin: 10px 0; }
+                        .flex-justify { display: flex; justify-content: space-between; margin-bottom: 6px; }
+                        .grand-total { font-size: 14px; font-weight: bold; margin-top: 12px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="text-center">
+                        <h2 style="margin:0;">✨ SmartBoutique ✨</h2>
+                        <p style="margin:2px 0 8px; font-size:12px;">Corte de Caja</p>
+                    </div>
+                    <div class="linea-divisoria"></div>
+                    <div class="flex-justify"><span>Folio:</span><span>#C-${datosCaja.id}</span></div>
+                    <div class="flex-justify"><span>Usuario:</span><span>${usuarioActivo}</span></div>
+                    <div class="flex-justify"><span>Estado:</span><span>${datosCaja.estado.toUpperCase()}</span></div>
+                    <div class="linea-divisoria"></div>
+                    <div class="flex-justify"><span>Fondo Inicial</span><span>$${fondoInicial.toFixed(2)}</span></div>
+                    <div class="flex-justify"><span>Ventas Turno</span><span>$${totalVentas.toFixed(2)}</span></div>
+                    <div class="linea-divisoria"></div>
+                    <div class="grand-total flex-justify"><span>Total Caja</span><span>$${montoFinal.toFixed(2)}</span></div>
+                    <div class="linea-divisoria"></div>
+                    <div style="text-align:center; font-size:11px; margin-top:10px;">Impreso el ${new Date().toLocaleString('es-MX')}</div>
+                    <script>window.print();</script>
+                </body>
+                </html>
+            `);
             ventanaImpresion.document.close();
         } catch (error) { console.error(error); }
+    };
+
+    const handleImprimirTicketVenta = () => {
+        if (!detallesTicket || detallesTicket.length === 0) return;
+        const totalNeto = detallesTicket.reduce((acc, item) => acc + (item.cantidad * parseFloat(item.precio_unitario)), 0).toFixed(2);
+        const fecha = new Date().toLocaleString('es-MX');
+        const ventanaImpresion = window.open('', '_blank', 'width=520,height=780,scrollbars=yes');
+        ventanaImpresion.document.write(`
+            <html>
+            <head>
+                <title>Ticket de Venta - #V-${folioSeleccionado}</title>
+                <style>
+                    body { font-family: 'Courier New', monospace; width: 360px; margin: 0 auto; padding: 20px; font-size: 13px; color: #111; }
+                    .text-center { text-align: center; }
+                    .fw-bold { font-weight: bold; }
+                    .linea-divisoria { border-top: 1px dashed #555; margin: 10px 0; }
+                    .flex-justify { display: flex; justify-content: space-between; margin-bottom: 6px; }
+                    .grand-total { font-size: 14px; font-weight: bold; margin-top: 10px; }
+                </style>
+            </head>
+            <body>
+                <div class="text-center">
+                    <h2 style="margin:0;">✨ SmartBoutique ✨</h2>
+                    <p style="margin:4px 0; font-size:12px;">Ticket de Venta</p>
+                </div>
+                <div class="linea-divisoria"></div>
+                <div class="flex-justify"><span>Folio:</span><span>#V-${folioSeleccionado}</span></div>
+                <div class="flex-justify"><span>Usuario:</span><span>${usuarioActivo}</span></div>
+                <div class="flex-justify"><span>Fecha:</span><span>${fecha}</span></div>
+                <div class="linea-divisoria"></div>
+                ${detallesTicket.map(item => `<div class="flex-justify"><span>${item.cantidad}x ${item.nombre_prenda}</span><span>$${(item.cantidad * parseFloat(item.precio_unitario)).toFixed(2)}</span></div>`).join('')}
+                <div class="linea-divisoria"></div>
+                <div class="grand-total flex-justify"><span>Total:</span><span>$${totalNeto}</span></div>
+                <div class="linea-divisoria"></div>
+                <div style="text-align:center; font-size:11px; margin-top:10px;">Gracias por su compra</div>
+                <script>window.print();</script>
+            </body>
+            </html>
+        `);
+        ventanaImpresion.document.close();
     };
 
     const handleDeleteUser = async (id) => {
@@ -789,31 +895,78 @@ const AdminDashboard = () => {
                         )}
 
                         {/* ==================== SECCIÓN 6: FINANCIAL BOX ==================== */}
-                        {vistaActiva === 'caja' && (
-                            <div>
-                                <h4 className="fw-bold mb-4" style={{ color: '#ad1457' }}>💵 Flujos de Caja Activa</h4>
-                                <Row className="g-3 justify-content-center text-center mb-5">
-                                    <Col md={4}>
-                                        <div className="p-4 shadow-sm bg-white border rounded-4">
-                                            <span className="text-muted fw-bold text-uppercase small">Fondo Caja</span>
-                                            <h2 className="text-primary mt-2">${movimientosCajaData[0]?.estado === 'abierta' ? parseFloat(movimientosCajaData[0].monto_inicial).toFixed(2) : '0.00'}</h2>
-                                        </div>
-                                    </Col>
-                                    <Col md={4}>
-                                        {movimientosCajaData[0]?.estado === 'abierta' ? (
-                                            <Button onClick={handleCerrarCaja} className="w-100 p-4 border-0 rounded-4 text-white fw-bold" style={{ background: 'linear-gradient(135deg, #d32f2f, #c2185b)' }}>🔒 Ejecutar Corte de Caja</Button>
-                                        ) : (
-                                            <Button onClick={() => setShowModalAbrir(true)} className="w-100 p-4 border-0 rounded-4 text-white fw-bold" style={{ background: 'linear-gradient(135deg, #2e7d32, #1b5e20)' }}>🔑 Abrir Nueva Caja</Button>
-                                        )}
-                                    </Col>
-                                </Row>
+                         {vistaActiva === 'caja' && (
+                    <div className="p-2" style={{ fontSize: '1.05rem' }}>
+                        <h4 className="fw-bold mb-4" style={{ color: '#c2185b' }}>💵 Control Financiero y Arqueos de Turno Local</h4>
+                        <div className="row g-3 justify-content-center text-center mb-5">
+                            <div className="col-12 col-md-3">
+                                <div className="p-3 shadow-sm rounded-4 border bg-white d-flex flex-column justify-content-center align-items-center" style={{ height: '100%', minHeight: '140px' }}>
+                                    <span className="text-muted fw-bold text-uppercase small">Fondo Apertura</span>
+                                    <h2 className="fw-black my-2 text-primary" style={{ fontSize: '1.8rem' }}>${cajaActiva?.estado === 'abierta' ? parseFloat(cajaActiva.monto_inicial).toFixed(2) : '0.00'}</h2>
+                                    <Badge bg={cajaActiva?.estado === 'abierta' ? 'success' : 'secondary'} className="px-3 py-2 fs-7">{cajaActiva?.estado === 'abierta' ? 'Turno Activo' : 'Turno Cerrado'}</Badge>
+                                </div>
                             </div>
-                        )}
+                            <div className="col-12 col-md-4">
+                                {cajaActiva?.estado === 'abierta' ? (
+                                    <button onClick={handleCerrarCaja} className="w-100 p-4 shadow border rounded-4 text-white h-100 d-flex flex-column justify-content-center align-items-center" style={{ background: 'linear-gradient(135deg, #d32f2f, #c2185b)', cursor: 'pointer' }}>
+                                        <div className="fs-2 mb-1">🔓</div><span className="fw-bold text-uppercase text-white-50 small">Arqueo de Turno</span><h3 className="fw-bold m-0 mt-1" style={{ fontSize: '1.45rem' }}>Realizar Corte de Caja</h3>
+                                    </button>
+                                ) : (
+                                    <button onClick={() => setShowModalAbrir(true)} className="w-100 p-4 shadow border rounded-4 text-white h-100 d-flex flex-column justify-content-center align-items-center" style={{ background: 'linear-gradient(135deg, #2e7d32, #1b5e20)', cursor: 'pointer' }}>
+                                        <div className="fs-2 mb-1">💵</div><span className="fw-bold text-uppercase text-white-50 small">Turno Inactivo</span><h3 className="fw-bold m-0 mt-1" style={{ fontSize: '1.45rem' }}>Abrir Turno</h3>
+                                    </button>
+                                )}
+                            </div>
+                            <div className="col-12 col-md-3">
+                                <button onClick={() => { if(cajaActiva) { handleImprimirTicketCorte(cajaActiva); } }} className="w-100 p-3 shadow-sm border rounded-4 bg-white h-100 d-flex flex-column justify-content-center align-items-center">
+                                    <span className="text-muted fw-bold text-uppercase small">Total en Caja</span>
+                                    <h2 className="fw-black my-2 text-success" style={{ fontSize: '1.8rem' }}>${cajaActiva ? (parseFloat(cajaActiva.monto_final || cajaActiva.monto_inicial) - parseFloat(cajaActiva.monto_inicial)).toFixed(2) : '0.00'}</h2>
+                                    <span className="badge bg-dark rounded-pill py-2 px-3 text-uppercase font-monospace fs-7">📄 Imprimir Reporte</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-4 p-3 shadow-sm border">
+                            <h6 className="fw-bold text-secondary mb-3 fs-5">📋 Historial General de Arqueos locales</h6>
+                            <Table responsive hover className="text-center align-middle mb-0 table-borderless">
+                                <thead className="table-light"><tr><th>ID Corte</th><th>Operador ID</th><th>F. Apertura</th><th>Monto Inicial</th><th>F. Cierre</th><th>Monto Final</th><th>Estado</th></tr></thead>
+                                <tbody>
+                                    {movimientosCajaData.map((caja, i) => (
+                                        <tr key={i} className="border-bottom" style={{ height: '46px' }}>
+                                            <td className="fw-bold text-secondary">#C-{caja.id}</td>
+                                            <td><Badge bg="dark" className="fs-6 px-2 py-1">ID User: {caja.usuario_id}</Badge></td>
+                                            <td className="text-muted">{caja.fecha_apertura ? new Date(caja.fecha_apertura).toLocaleString('es-MX') : '---'}</td>
+                                            <td className="fw-bold text-primary fs-5">${parseFloat(caja.monto_inicial).toFixed(2)}</td>
+                                            <td className="text-muted">{caja.fecha_cierre ? new Date(caja.fecha_cierre).toLocaleString('es-MX') : '---'}</td>
+                                            <td className="fw-bold text-success fs-5">{caja.monto_final ? `$${parseFloat(caja.monto_final).toFixed(2)}` : '---'}</td>
+                                            <td><Badge bg={caja.estado === 'abierta' ? 'success' : 'secondary'} className="fs-6 px-2 py-1">{caja.estado.toUpperCase()}</Badge></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </Table>
+                        </div>
+                    </div>
+                )}
 
                         {/* ==================== SECCIÓN 7: DEVOLUCIONES ==================== */}
                         {vistaActiva === 'devoluciones' && (
                             <div>
                                 <h4 className="fw-bold mb-4" style={{ color: '#ad1457' }}>↩️ Devoluciones Globales</h4>
+                                <Card className="mb-4 shadow-sm border-0" style={{ borderRadius: '14px', backgroundColor: '#fce4ec', border: '1px solid #f8bbd0' }}>
+                                    <Card.Body className="p-4">
+                                        <Form onSubmit={handleRegistroDevolucion}>
+                                            <Row className="g-3 align-items-end">
+                                                <Col md={2}><Form.Group><Form.Label className="fw-bold text-muted">TicketOrig.</Form.Label><Form.Control type="number" name="venta_id" className="form-control-lg text-center" required /></Form.Group></Col>
+                                                <Col md={4}><Form.Group><Form.Label className="fw-bold text-muted">Artículo Devuelto</Form.Label><Form.Control type="text" name="producto_detalle" className="form-control-lg" required /></Form.Group></Col>
+                                                <Col md={2}><Form.Group><Form.Label className="fw-bold text-muted">Cantidad</Form.Label><Form.Control type="number" name="cantidad" className="form-control-lg text-center" required /></Form.Group></Col>
+                                                <Col md={2}><Form.Group><Form.Label className="fw-bold text-muted">Reembolso ($)</Form.Label><Form.Control type="number" step="0.01" name="monto_reembolsado" className="form-control-lg text-center" required /></Form.Group></Col>
+                                                <Col md={2}><Form.Group><Form.Label className="fw-bold text-muted">Método</Form.Label><Form.Select name="tipo_reembolso" className="form-select-lg"><option value="Efectivo">💵 Efectivo</option><option value="Nota de Crédito">🎟️ Nota de Crédito</option></Form.Select></Form.Group></Col>
+                                                <Col md={12}><Form.Group><Form.Label className="fw-bold text-muted">Motivo del Cambio</Form.Label><Form.Control type="text" name="motivo_devolucion" className="form-control-lg" required /></Form.Group></Col>
+                                                <Col md={12} className="text-end mt-3"><Button type="submit" className="fw-bold px-4 py-2 btn-lg text-white shadow" style={{ backgroundColor: '#ad1457', borderColor: '#ad1457' }}>↩️ Aplicar Reembolso</Button></Col>
+                                            </Row>
+                                        </Form>
+                                    </Card.Body>
+                                </Card>
                                 <Table responsive hover className="text-center align-middle border">
                                     <thead className="table-light"><tr><th>ID DEV</th><th>Ticket</th><th>Artículo</th><th>Reembolso</th></tr></thead>
                                     <tbody>
@@ -836,21 +989,33 @@ const AdminDashboard = () => {
 
             {/* ==================== MODALES FLOTANTES (TICKETS Y ACTUALIZACIONES) ==================== */}
             <Modal show={showTicketModal} onHide={() => setShowTicketModal(false)} centered size="sm">
-                <Modal.Body className="p-4" style={{ fontFamily: 'Courier New, monospace' }}>
-                    <div className="text-center mb-3">
-                        <h5 className="fw-bold m-0" style={{ color: '#ad1457' }}>✨ SMART BOUTIQUE ✨</h5>
-                        <small className="text-muted d-block">Folio: #V-{folioSeleccionado}</small>
+                <Modal.Body className="p-4" style={{ fontFamily: 'Courier New, monospace', backgroundColor: '#ffffff', fontSize: '1.05rem' }}>
+                    <div className="d-flex gap-2 justify-content-center mb-4 d-print-none">
+                        <Button variant="success" size="md" className="fw-bold px-4 shadow-sm border-0" style={{ backgroundColor: '#2e7d32' }} onClick={handleImprimirTicketVenta}>🖨️ Imprimir</Button>
+                        <Button variant="secondary" size="md" className="fw-bold px-4 shadow-sm border-0" style={{ backgroundColor: '#757575' }} onClick={() => setShowTicketModal(false)}>❌ Cerrar</Button>
                     </div>
-                    {detallesTicket.map((item, i) => (
-                        <div key={i} className="d-flex justify-content-between small mb-1">
-                            <span>{item.cantidad}x {item.nombre_prenda}</span>
-                            <span className="fw-bold">${(item.cantidad * parseFloat(item.precio_unitario)).toFixed(2)}</span>
-                        </div>
-                    ))}
-                    <hr style={{ borderTop: '1px dashed #000' }} />
-                    <div className="d-flex justify-content-between fw-bold">
-                        <span>TOTAL NETO:</span>
-                        <span className="text-success">${detallesTicket.reduce((acc, item) => acc + (item.cantidad * parseFloat(item.precio_unitario)), 0).toFixed(2)}</span>
+                    <div className="text-center mb-3">
+                        <h4 className="fw-bold m-0" style={{ color: '#ad1457', letterSpacing: '1px' }}>✨ SMART BOUTIQUE ✨</h4>
+                        <small className="text-muted d-block" style={{ fontSize: '0.8rem' }}>Instituto Tecnológico Superior de Apatzingán</small>
+                        <div className="my-2" style={{ borderTop: '1px dashed #ced4da' }}></div>
+                        <span className="fw-bold d-block">COMPROBANTE DE VENTA</span>
+                        <span className="text-secondary">Folio: #V-{folioSeleccionado}</span>
+                    </div>
+                    <div className="mb-3">
+                        {detallesTicket.map((item, i) => (
+                            <div key={i} className="mb-2" style={{ fontSize: '0.85rem', lineHeight: '1.3' }}>
+                                <div className="fw-bold text-dark text-uppercase">{item.nombre_prenda}</div>
+                                <div className="d-flex justify-content-between text-muted ps-2">
+                                    <span>{item.cantidad} pza(s) x ${parseFloat(item.precio_unitario).toFixed(2)}</span>
+                                    <span className="fw-bold text-dark">${(item.cantidad * parseFloat(item.precio_unitario)).toFixed(2)}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="my-2" style={{ borderTop: '1px dashed #ced4da' }}></div>
+                    <div style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
+                        <div className="d-flex justify-content-between text-muted"><span>SUBTOTAL:</span><span>${detallesTicket.reduce((acc, item) => acc + (item.cantidad * parseFloat(item.precio_unitario)), 0).toFixed(2)}</span></div>
+                        <div className="d-flex justify-content-between fw-bold mb-3" style={{ fontSize: '0.95rem' }}><span>TOTAL COBRADO:</span><span className="text-success">${detallesTicket.reduce((acc, item) => acc + (item.cantidad * parseFloat(item.precio_unitario)), 0).toFixed(2)}</span></div>
                     </div>
                 </Modal.Body>
             </Modal>
