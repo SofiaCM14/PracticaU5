@@ -337,47 +337,49 @@ const VendedorDashboard = () => {
                         </Row>
 
                         <Row className="g-3">
-                            {Array.isArray(productos) && productos.map((p, i) => {
-                                const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23e91e63' text-anchor='middle'>SmartBoutique</text></svg>";
-                                const tagsArray = p.tags && Array.isArray(p.tags) ? p.tags : [];
-                                let imagenSrc = p.imagen_url && p.imagen_url.trim() !== '' && !p.imagen_url.includes('[object Object]')
-                                    ? (p.imagen_url.startsWith('data:image') || p.imagen_url.includes('http') ? p.imagen_url : `data:image/jpeg;base64,${p.imagen_url}`)
-                                    : fallbackImg;
+                                {Array.isArray(productos) && productos.map((p, i) => {
+                                    const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23e91e63' text-anchor='middle'>SmartBoutique</text></svg>";
+                                    const tagsArray = p.tags && Array.isArray(p.tags) ? p.tags : [];
+                                    let imagenSrc = p.imagen_url && p.imagen_url.trim() !== '' && !p.imagen_url.includes('[object Object]')
+                                        ? (p.imagen_url.startsWith('data:image') || p.imagen_url.includes('http') ? p.imagen_url : `data:image/jpeg;base64,${p.imagen_url}`)
+                                        : fallbackImg;
 
-                                return (
-                                    <Col xs={12} sm={6} md={4} lg={3} xl={2} key={i} className="d-flex">
-                                        <Card style={styles.cardBoutique} className="shadow-sm border-0 w-100 d-flex flex-column rounded-4 bg-white overflow-hidden">
-                                            <div className="d-flex justify-content-center align-items-center p-2 bg-light" style={{ height: '170px', overflow: 'hidden' }}>
-                                                <Card.Img variant="top" src={imagenSrc} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} onError={(e) => { e.target.src = fallbackImg; }} />
-                                            </div>
-                                            <Card.Body className="d-flex flex-column justify-content-between p-2" style={{ fontSize: '0.95rem' }}>
-                                                <div>
-                                                    <div className="d-flex justify-content-between align-items-center mb-1">
-                                                        <span className="text-muted small fw-bold text-uppercase">{p.categoria || 'Moda'}</span>
-                                                        <Badge bg="light" text="dark" className="border small">#{p.id}</Badge>
-                                                    </div>
-                                                    <Card.Title className="fw-bold text-dark fs-6 mb-1 text-truncate">{p.nombre}</Card.Title>
-                                                    <div className="d-flex flex-wrap gap-1 mb-2">
-                                                        <Badge bg="dark" style={{ fontSize: '0.75rem' }}>Talla: {p.talla || 'M'}</Badge>
-                                                        <Badge bg={p.stock > 5 ? 'success' : 'danger'} style={{ fontSize: '0.75rem' }}>Stock: {p.stock} pz</Badge>
-                                                    </div>
+                                    return (
+                                        <Col xs={12} sm={6} md={4} lg={3} xl={2} key={i} className="d-flex">
+                                            <Card style={styles.cardBoutique} className="shadow-sm border-0 w-100 d-flex flex-column rounded-4 bg-white overflow-hidden">
+                                                <div className="d-flex justify-content-center align-items-center p-2 bg-light" style={{ height: '170px', overflow: 'hidden' }}>
+                                                    <Card.Img variant="top" src={imagenSrc} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} onError={(e) => { e.target.src = fallbackImg; }} />
                                                 </div>
-                                                <div className="mt-auto">
-                                                    <div className="d-flex justify-content-between align-items-center mb-2">
-                                                        <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '50%' }}>
-                                                            {tagsArray.slice(0, 1).map((t, idx) => (
-                                                                <Badge key={idx} bg="light" text="secondary" className="border p-1" style={{ fontSize: '0.7rem' }}>#{t}</Badge>
-                                                            ))}
+                                                <Card.Body className="d-flex flex-column justify-content-between p-2" style={{ fontSize: '0.95rem' }}>
+                                                    <div>
+                                                        <div className="d-flex justify-content-between align-items-center mb-1">
+                                                            <span className="text-muted small fw-bold text-uppercase">{p.categoria || 'Moda'}</span>
+                                                            <Badge bg="light" text="dark" className="border small">#{p.id}</Badge>
                                                         </div>
-                                                        <h5 className="fw-bold text-danger m-0 font-monospace">${parseFloat(p.precio || 0).toFixed(2)}</h5>
+                                                        <Card.Title className="fw-bold text-dark fs-6 mb-1 text-truncate">{p.nombre}</Card.Title>
+                                                        <div className="d-flex flex-wrap gap-1 mb-2">
+                                                            <Badge bg="dark" style={{ fontSize: '0.75rem' }}>Talla: {p.talla || 'M'}</Badge>
+                                                            <Badge bg={p.stock > 0 ? 'success' : 'danger'} style={{ fontSize: '0.75rem' }}>{p.stock > 0 ? `Stock: ${p.stock} pz` : 'Agotado'}</Badge>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            </Card.Body>
-                                        </Card>
-                                    </Col>
-                                );
-                            })}
-                        </Row>
+                                                    <div className="mt-auto">
+                                                        <div className="d-flex justify-content-between align-items-center mb-2">
+                                                            <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '50%' }}>
+                                                                {tagsArray.slice(0, 1).map((t, idx) => (
+                                                                    <Badge key={idx} bg="light" text="secondary" className="border p-1" style={{ fontSize: '0.7rem' }}>#{t}</Badge>
+                                                                ))}
+                                                            </div>
+                                                            <h5 className="fw-bold text-danger m-0 font-monospace">${parseFloat(p.precio || 0).toFixed(2)}</h5>
+                                                        </div>
+                                                        
+                                                    </div>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                    );
+                                })}
+                            </Row>
+
 
                         {/* 👇 BOTÓN DE CONTROL DE CARGA DIRECTA SECUENCIAL */}
                         {paginaActual < totalPaginas && (

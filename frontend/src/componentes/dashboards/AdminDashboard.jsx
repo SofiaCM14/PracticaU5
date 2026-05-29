@@ -614,11 +614,44 @@ const AdminDashboard = () => {
                                                 <td>{editandoId === u.id ? <Form.Select value={editRol} onChange={e => setEditRol(e.target.value)}><option value="admin">admin</option><option value="vendedor">vendedor</option></Form.Select> : <Badge bg="danger" className="fs-6">{u.rol}</Badge>}</td>
                                                 <td>{editandoId === u.id ? <Form.Control type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)} /> : '••••••••'}</td>
                                                 <td>
+                                                    {/* Columnas de Acciones de Empleados */}
+                                                <td>
                                                     {editandoId === u.id ? (
-                                                        <Button variant="primary" onClick={() => handleSaveEditUser(u.id)}>Guardar</Button>
+                                                        <>
+                                                            <Button variant="primary" className="btn-md fw-bold me-2 px-3 py-1" onClick={() => handleSaveEditUser(u.id)}>Guardar</Button>
+                                                            <Button variant="dark" className="btn-md fw-bold px-3 py-1" onClick={() => { setEditandoId(null); setEditPassword(''); setShowPass(false); }}>X</Button>
+                                                        </>
                                                     ) : (
-                                                        <Button variant="outline-secondary" size="sm" onClick={() => { setEditandoId(u.id); setEditUsername(u.username); setEditRol(u.rol); setEditPassword(u.password || ''); }}>✏️</Button>
+                                                        <>
+                                                            <Button 
+                                                                variant="outline-secondary" 
+                                                                className="btn-sm me-2 px-3 py-1 fw-bold" 
+                                                                onClick={() => { 
+                                                                    setEditandoId(u.id); 
+                                                                    setEditUsername(u.username); 
+                                                                    setEditRol(u.rol); 
+                                                                    setEditPassword(u.password || ''); 
+                                                                    setShowPass(false); 
+                                                                }}
+                                                            >
+                                                                ✏️
+                                                            </Button>
+                                                            
+                                                            {/* 🗑️ BOTÓN DE ELIMINACIÓN CON BOTE DE BASURA CONFIGURADO */}
+                                                            <Button 
+                                                                variant="outline-danger" 
+                                                                className="btn-sm px-3 py-1 fw-bold shadow-sm" 
+                                                                onClick={() => { 
+                                                                    setUserIdAEliminar(u.id); 
+                                                                    setUsernameAEliminar(u.username); 
+                                                                    setShowDeleteModal(true); // 🔓 Desbloquea el Modal de Advertencia
+                                                                }}
+                                                            >
+                                                                🗑️
+                                                            </Button>
+                                                        </>
                                                     )}
+                                                </td>
                                                 </td>
                                             </tr>
                                         ))}
@@ -626,6 +659,59 @@ const AdminDashboard = () => {
                                 </Table>
                             </div>
                         )}
+                        {/* ==================== 🔒 MODAL DE ELIMINACIÓN DE STAFF (BOTE DE BASURA) ==================== */}
+                        <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} centered backdrop="static">
+                            <Modal.Header closeButton className="border-0 pb-0">
+                                <Modal.Title className="fw-bold fs-4 text-danger">⚠️ Confirmar Baja de Personal</Modal.Title>
+                            </Modal.Header>
+                            <Modal.Body className="py-3 fs-5">
+                                <p className="text-muted">
+                                    Estás a punto de eliminar de forma permanente al empleado 
+                                    <b className="text-dark"> "{usernameAEliminar}" </b> (ID: #{userIdAEliminar}) del sistema.
+                                </p>
+                                <div className="alert alert-warning py-2 mb-0 small fw-bold">
+                                    ❗ Esta acción desvinculará sus credenciales de acceso de forma inmediata en la base de datos cloud.
+                                </div>
+                            </Modal.Body>
+                            <Modal.Footer className="border-0 pt-0">
+                                <Button variant="light" className="fw-bold" onClick={() => setShowDeleteModal(false)}>
+                                    Cancelar
+                                </Button>
+                                <Button 
+                                    variant="danger" 
+                                    className="fw-bold px-4" 
+                                    onClick={async () => {
+                                        try {
+                                            // Executa el consumo a la API mapeada con DELETE
+                                            const res = await fetch(`http://34.219.103.28:3000/api/productos/usuarios/${userIdAEliminar}`, {
+                                                method: 'DELETE',
+                                                headers: getAuthHeaders()
+                                            });
+
+                                            if (res.ok) {
+                                                setShowDeleteModal(false);
+                                                // Limpieza reactiva en caliente sobre la tabla del frontend
+                                                setListaUsuarios(listaUsuarios.filter(u => u.id !== userIdAEliminar));
+                                                
+                                                Swal.fire({
+                                                    title: '¡Eliminado!',
+                                                    text: `El operador "${usernameAEliminar}" ha sido removido con éxito de AWS RDS.`,
+                                                    icon: 'success',
+                                                    confirmButtonColor: '#ad1457'
+                                                });
+                                            } else {
+                                                Swal.fire('❌ Error', 'No se pudo procesar la baja en el servidor.', 'error');
+                                            }
+                                        } catch (err) {
+                                            console.error("Error al borrar usuario:", err);
+                                            Swal.fire('❌ Error', 'Fallo de conectividad de red.', 'error');
+                                        }
+                                    }}
+                                >
+                                    💥 Confirmar Eliminación
+                                </Button>
+                            </Modal.Footer>
+                        </Modal>
 
                         {/* ==================== SECCIÓN 4: AUDITORÍA DE MOVIMIENTOS ==================== */}
                         {vistaActiva === 'auditoria' && (
