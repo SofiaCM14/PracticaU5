@@ -197,10 +197,15 @@ const VendedorDashboard = () => {
             });
 
             if (res.ok) {
-                setIdProductoVenta(''); cantidadVenta(''); setDescuentoSeleccionado('0'); 
+                setIdProductoVenta(''); setCantidadVenta(''); setDescuentoSeleccionado('0'); 
                 setDescuentoAutorizado(false); setSupervisorNombre('');
                 await sincronizarVendedor(true, 1); 
-                Swal.fire('🛍 *¡Venta Exitosa!*', 'Registro inyectado en el turno actual de la caja.', 'success');
+                Swal.fire({
+                    title: '¡Venta Registrada! 🛍️',
+                    html: `<p><strong>Total:</strong> $${totalCobradoFinal.toFixed(2)}</p><p><strong>Descuento aplicado:</strong> $${totalDineroDescontado.toFixed(2)}</p><p>La venta ha sido registrada exitosamente en el sistema.</p>`,
+                    icon: 'success',
+                    confirmButtonColor: '#e91e63'
+                });
             }
         } catch (error) {
             console.error(error);
@@ -225,13 +230,28 @@ const VendedorDashboard = () => {
         try {
             const res = await fetch(`http://34.219.103.28:3000/api/productos/asistencia/recibir/${id}`, {
                 method: 'PUT',
-                headers: { ...getAuthHeaders() }
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                body: JSON.stringify({ usuario_id: localStorage.getItem('userId') ? parseInt(localStorage.getItem('userId')) : 4})
             });
             if (res.ok) {
-                Swal.fire('📩 Recibido', 'Le hemos notificado al cliente que vas en camino.', 'info');
+                Swal.fire({
+                    title: '✅ Notificación Enviada',
+                    text: 'El cliente ha recibido la notificación de que vas en camino.',
+                    icon: 'success',
+                    confirmButtonColor: '#e91e63'
+                });
+                if (vistaActiva === 'probadores' || vistaActiva === 'probador') {
                 sincronizarVendedor(true, 1);
+            } else {
+                cargarDatosEncargado(true, 1);
             }
-        } catch (err) { console.error(err); }
+            } else {
+                Swal.fire('⚠️ Error', 'No se pudo notificar al cliente. Intenta de nuevo.', 'error');
+            }
+        } catch (err) { 
+            console.error(err);
+            Swal.fire('❌ Error de conexión', 'No se pudo conectar con el servidor.', 'error');
+        }
     };
 
     const styles = {
@@ -318,54 +338,41 @@ const VendedorDashboard = () => {
 
                         <Row className="g-3">
                             {Array.isArray(productos) && productos.map((p, i) => {
-                                const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23e91e63' text-anchor='middle'>Prenda SmartBoutique</text></svg>";
+                                const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23e91e63' text-anchor='middle'>SmartBoutique</text></svg>";
                                 const tagsArray = p.tags && Array.isArray(p.tags) ? p.tags : [];
-                                let imagenSrc = fallbackImg; 
-
-                                if (p.imagen_url && p.imagen_url.trim() !== '' && !p.imagen_url.includes('[object Object]')) {
-                                    if (p.imagen_url.startsWith('data:image') || p.imagen_url.includes('http')) {
-                                        imagenSrc = p.imagen_url;
-                                    } else {
-                                        imagenSrc = `data:image/jpeg;base64,${p.imagen_url}`;
-                                    }
-                                }
+                                let imagenSrc = p.imagen_url && p.imagen_url.trim() !== '' && !p.imagen_url.includes('[object Object]')
+                                    ? (p.imagen_url.startsWith('data:image') || p.imagen_url.includes('http') ? p.imagen_url : `data:image/jpeg;base64,${p.imagen_url}`)
+                                    : fallbackImg;
 
                                 return (
-                                    <Col md={12} lg={6} key={i}>
-                                        <Card style={styles.cardBoutique} className="shadow-sm h-100 overflow-hidden border-0">
-                                            <Row className="g-0 h-100">
-                                                <Col xs={7} className="d-flex flex-column justify-content-between p-3">
-                                                    <div>
-                                                        <div className="d-flex justify-content-between align-items-center mb-2">
-                                                            <span className="text-muted fw-bold text-uppercase" style={{ fontSize: '0.95rem' }}>{p.categoria || 'Moda'}</span>
-                                                            <Badge bg="light" text="dark" className="border fs-6">ID: #{p.id}</Badge>
-                                                        </div>
-                                                        <Card.Title className="fw-bold text-dark fs-4 mb-2">{p.nombre}</Card.Title>
-                                                        <Card.Text className="text-muted mb-3 small" style={{ minHeight: '44px', lineHeight: '1.4' }}>{p.descripcion || 'Sin descripción.'}</Card.Text>
-                                                        <div className="d-flex flex-wrap gap-2 mb-2">
-                                                            <Badge bg="dark" className="p-2 fs-6">Talla: {p.talla || 'M'}</Badge>
-                                                            <Badge bg="secondary" className="p-2 fs-6">Color: {p.color || 'Multicolor'}</Badge>
-                                                            <Badge bg={p.stock > 5 ? 'success' : 'danger'} className="p-2 fs-6">Stock: {p.stock} pz</Badge>
-                                                        </div>
+                                    <Col xs={12} sm={6} md={4} lg={3} xl={2} key={i} className="d-flex">
+                                        <Card style={styles.cardBoutique} className="shadow-sm border-0 w-100 d-flex flex-column rounded-4 bg-white overflow-hidden">
+                                            <div className="d-flex justify-content-center align-items-center p-2 bg-light" style={{ height: '170px', overflow: 'hidden' }}>
+                                                <Card.Img variant="top" src={imagenSrc} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} onError={(e) => { e.target.src = fallbackImg; }} />
+                                            </div>
+                                            <Card.Body className="d-flex flex-column justify-content-between p-2" style={{ fontSize: '0.95rem' }}>
+                                                <div>
+                                                    <div className="d-flex justify-content-between align-items-center mb-1">
+                                                        <span className="text-muted small fw-bold text-uppercase">{p.categoria || 'Moda'}</span>
+                                                        <Badge bg="light" text="dark" className="border small">#{p.id}</Badge>
                                                     </div>
-                                                    <div className="d-flex justify-content-between align-items-end mt-3">
-                                                        <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '60%' }}>
-                                                            {tagsArray.slice(0, 2).map((t, idx) => (
-                                                                <Badge key={idx} bg="light" text="secondary" className="border p-1" style={{ fontSize: '0.85rem' }}>#{t}</Badge>
+                                                    <Card.Title className="fw-bold text-dark fs-6 mb-1 text-truncate">{p.nombre}</Card.Title>
+                                                    <div className="d-flex flex-wrap gap-1 mb-2">
+                                                        <Badge bg="dark" style={{ fontSize: '0.75rem' }}>Talla: {p.talla || 'M'}</Badge>
+                                                        <Badge bg={p.stock > 5 ? 'success' : 'danger'} style={{ fontSize: '0.75rem' }}>Stock: {p.stock} pz</Badge>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-auto">
+                                                    <div className="d-flex justify-content-between align-items-center mb-2">
+                                                        <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '50%' }}>
+                                                            {tagsArray.slice(0, 1).map((t, idx) => (
+                                                                <Badge key={idx} bg="light" text="secondary" className="border p-1" style={{ fontSize: '0.7rem' }}>#{t}</Badge>
                                                             ))}
                                                         </div>
-                                                        <div className="text-end">
-                                                            <span className="d-block text-muted fw-bold" style={{ fontSize: '0.75rem' }}>PRECIO PISO</span>
-                                                            <h3 className="fw-bold text-danger m-0 font-monospace" style={{ fontSize: '1.8rem' }}>${parseFloat(p.precio || 0).toFixed(2)}</h3>
-                                                        </div>
+                                                        <h5 className="fw-bold text-danger m-0 font-monospace">${parseFloat(p.precio || 0).toFixed(2)}</h5>
                                                     </div>
-                                                </Col>
-                                                <Col xs={5} className="d-flex align-items-center justify-content-center bg-light border-start" style={{ borderColor: '#f8bbd0' }}>
-                                                    <div className="w-100 d-flex justify-content-center align-items-center p-2" style={{ height: '100%', minHeight: '230px', backgroundColor: '#fffdfd' }}>
-                                                        <Card.Img src={imagenSrc} style={{ maxHeight: '210px', maxWidth: '100%', objectFit: 'contain' }} onError={(e) => { e.target.src = fallbackImg; }} />
-                                                    </div>
-                                                </Col>
-                                            </Row>
+                                                </div>
+                                            </Card.Body>
                                         </Card>
                                     </Col>
                                 );
@@ -514,7 +521,7 @@ const VendedorDashboard = () => {
                                 </Form.Select>
                             </Col>
                             <Col md={2}>{descuentoAutorizado ? <Badge bg="success" className="w-100 py-3 fs-6 text-center shadow-sm">✓ LIBERADO</Badge> : <Button type="button" variant="dark" className="w-100 fw-bold py-2 btn-lg shadow-sm" onClick={() => setShowAuthModal(true)}>🔑 Autorizar</Button>}</Col>
-                            <Col md={3}><Button type="submit" className="w-100 fw-bold py-2 btn-lg text-white" style={{ backgroundColor: '#e91e63', borderColor: '#e91e63' }}>💰 Registrar Ticket</Button></Col>
+                            <Col md={3}><Button type="submit" className="w-100 fw-bold py-2 btn-lg text-white" style={{ backgroundColor: '#e91e63', borderColor: '#e91e63' }}>💰 Registrar Venta</Button></Col>
                         </Form>
 
                         <h4 className="fw-bold mb-3 mt-4" style={{ color: '#e91e63' }}>💰 Historial de Caja Activa</h4>

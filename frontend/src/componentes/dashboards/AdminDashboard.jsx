@@ -107,8 +107,16 @@ const AdminDashboard = () => {
             setCargandoMas(false);
 
             // 2. Cargar datos estáticos de los módulos restantes
-            const resAudit = await fetch('http://34.219.103.28:3000/api/productos/auditoria');
-            if (resAudit.ok) setRecentActivity(await resAudit.json());
+            const resAudit = await fetch('http://34.219.103.28:3000/api/productos/auditoria?page=1&limit=1000', {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json', 'username': usuarioActivo, ...authHeaders }
+            });
+            if (resAudit.ok) {
+                const auditData = await resAudit.json();
+                setRecentActivity(Array.isArray(auditData.records) ? auditData.records : []);
+            } else {
+                setRecentActivity([]);
+            }
 
             const resUser = await fetch('http://34.219.103.28:3000/api/productos/usuarios', {
                 method: 'GET',
@@ -511,7 +519,7 @@ const AdminDashboard = () => {
                                                             </div>
 
                                                             <Button size="sm" style={{ backgroundColor: '#ad1457', border: 'none', borderRadius: '8px' }} className="w-100 fw-bold py-2 shadow-sm" onClick={() => abrirFormularioProducto(p)}>
-                                                                ⚙️ Ajustes
+                                                                ⚙️ Actualizar Prenda
                                                             </Button>
                                                         </div>
                                                     </Card.Body>
@@ -570,7 +578,7 @@ const AdminDashboard = () => {
                                         <Form.Label className="fw-bold text-muted">Fotografía</Form.Label>
                                         <Form.Control type="file" accept="image/*" onChange={handleFileChange} className="form-control-lg" />
                                     </Form.Group>
-                                    <Button type="submit" className="w-100 fw-bold py-3 text-white shadow" style={{ backgroundColor: '#ad1457', border: 'none', borderRadius: '10px' }}>📦 Guardar en AWS RDS</Button>
+                                    <Button type="submit" className="w-100 fw-bold py-3 text-white shadow" style={{ backgroundColor: '#ad1457', border: 'none', borderRadius: '10px' }}>📦 Guardar Producto Nuevo</Button>
                                 </Form>
                             </div>
                         )}
@@ -623,20 +631,41 @@ const AdminDashboard = () => {
                         {vistaActiva === 'auditoria' && (
                             <div>
                                 <h4 className="fw-bold mb-4" style={{ color: '#ad1457' }}>📡 Historial Global Operativo</h4>
-                                <Table responsive hover className="text-center align-middle border">
-                                    <thead className="table-light"><tr><th>Operador</th><th>Rol</th><th>Acción</th><th>Detalle de Operación</th><th>Fecha y Hora</th></tr></thead>
-                                    <tbody>
-                                        {recentActivity.map((log, i) => (
-                                            <tr key={i}>
-                                                <td className="fw-bold">{log.username || log.usuario || 'admin_sofi'}</td>
-                                                <td><Badge bg="danger">{log.rol || 'admin'}</Badge></td>
-                                                <td className="fw-bold text-secondary">{log.accion_realizada}</td>
-                                                <td className="text-muted text-start ps-3">{log.detalle_accion}</td>
-                                                <td className="font-monospace">{log.fecha ? new Date(log.fecha).toLocaleString('es-MX') : '---'}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </Table>
+                                {recentActivity && recentActivity.length > 0 ? (
+                                    <div className="table-responsive">
+                                        <Table responsive hover className="align-middle border mb-0">
+                                            <thead className="table-light">
+                                                <tr>
+                                                    <th style={{ width: '8%' }} className="text-center">ID</th>
+                                                    <th style={{ width: '10%' }} className="text-center">Usuario ID</th>
+                                                    <th style={{ width: '12%' }} className="text-center">Operador</th>
+                                                    <th style={{ width: '8%' }} className="text-center">Rol</th>
+                                                    <th style={{ width: '18%' }} className="text-center">Acción Realizada</th>
+                                                    <th style={{ width: '28%' }} className="text-start">Detalle Acción</th>
+                                                    <th style={{ width: '16%' }} className="text-center">Fecha y Hora</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {recentActivity.map((log, i) => (
+                                                    <tr key={i}>
+                                                        <td className="text-center fw-bold small">{log.id}</td>
+                                                        <td className="text-center fw-bold small">{log.usuario_id || '---'}</td>
+                                                        <td className="text-center fw-bold">{log.usuario || log.username || '---'}</td>
+                                                        <td className="text-center"><Badge bg="danger">{log.rol || 'N/A'}</Badge></td>
+                                                        <td className="text-center fw-bold text-secondary small">{log.accion_realizada}</td>
+                                                        <td className="text-start text-muted small ps-3">{log.detalle_accion}</td>
+                                                        <td className="text-center font-monospace small">{log.fecha ? new Date(log.fecha).toLocaleString('es-MX') : '---'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </Table>
+                                    </div>
+                                ) : (
+                                    <div className="alert alert-info text-center fw-bold">
+                                        <i className="bi bi-info-circle me-2"></i>
+                                        No hay movimientos registrados en la base de datos.
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -741,15 +770,29 @@ const AdminDashboard = () => {
             </Modal>
 
             <Modal show={showProdModal} onHide={() => setShowProdModal(false)} centered size="lg">
-                <Modal.Header closeButton><Modal.Title className="fw-bold" style={{ color: '#ad1457' }}>⚙️ Modificar Prenda</Modal.Title></Modal.Header>
-                <Modal.Body>
+                <Modal.Header closeButton style={{ borderBottom: '1px solid #f8bbd0' }}><Modal.Title className="fw-bold fs-4" style={{ color: '#ad1457' }}>⚙️ Actualizar Prenda</Modal.Title></Modal.Header>
+                <Modal.Body style={{ backgroundColor: '#fffdfd', fontSize: '1.05rem' }}>
                     <Form onSubmit={handleSaveEditProduct}>
-                        <Row className="g-3 mb-3">
-                            <Col md={6}><Form.Label className="fw-bold text-muted">Nombre</Form.Label><Form.Control type="text" value={editProdNombre} onChange={e => setEditProdNombre(e.target.value)} required /></Col>
-                            <Col md={3}><Form.Label className="fw-bold text-muted">Precio</Form.Label><Form.Control type="number" step="0.01" value={editProdPrecio} onChange={e => setEditProdPrecio(e.target.value)} required /></Col>
-                            <Col md={3}><Form.Label className="fw-bold text-muted">Stock Físico</Form.Label><Form.Control type="number" value={editProdStock} onChange={e => setEditProdStock(e.target.value)} required /></Col>
+                        <Row className="g-3 mb-2">
+                            <Col md={6}><Form.Group><Form.Label className="fw-bold text-muted">Nombre del Producto</Form.Label><Form.Control type="text" value={editProdNombre} onChange={e => setEditProdNombre(e.target.value)} required className="form-control-lg" /></Form.Group></Col>
+                            <Col md={3}><Form.Group><Form.Label className="fw-bold text-muted">Precio ($ MXN)</Form.Label><Form.Control type="number" step="0.01" value={editProdPrecio} onChange={e => setEditProdPrecio(e.target.value)} required className="form-control-lg text-center" /></Form.Group></Col>
+                            <Col md={3}><Form.Group><Form.Label className="fw-bold text-muted">Stock Físico</Form.Label><Form.Control type="number" value={editProdStock} onChange={e => setEditProdStock(e.target.value)} required className="form-control-lg text-center" /></Form.Group></Col>
                         </Row>
-                        <Button type="submit" className="w-100 fw-bold py-2 text-white" style={{ backgroundColor: '#ad1457', border: 'none' }}>Sincronizar Cambios</Button>
+                        <Row className="g-3 mb-2">
+                            <Col md={4}><Form.Group><Form.Label className="fw-bold text-muted">Talla Base</Form.Label><Form.Select value={editProdTalla} onChange={e => setEditProdTalla(e.target.value)} className="form-select-lg"><option value="S">S</option><option value="M">M</option><option value="L">L</option></Form.Select></Form.Group></Col>
+                            <Col md={4}><Form.Group><Form.Label className="fw-bold text-muted">Color Temático</Form.Label><Form.Control type="text" value={editProdColor} onChange={e => setEditProdColor(e.target.value)} required className="form-control-lg" /></Form.Group></Col>
+                            <Col md={4}><Form.Group><Form.Label className="fw-bold text-muted">Categoría en Tienda</Form.Label><Form.Control type="text" value={editProdCategoria} onChange={e => setEditProdCategoria(e.target.value)} required className="form-control-lg" /></Form.Group></Col>
+                        </Row>
+                        <Form.Group className="mb-2"><Form.Label className="fw-bold text-muted">Selector de Fotografía</Form.Label><Form.Control type="file" accept="image/*" onChange={handleFileChange} className="form-control-lg" /></Form.Group>
+                        <Form.Group className="mb-2"><Form.Label className="fw-bold text-muted">Cadena Hash</Form.Label><Form.Control type="text" readOnly disabled value={editProdImagen && editProdImagen.length > 60 ? `${editProdImagen.substring(0, 60)}...` : editProdImagen} className="form-control-lg" /></Form.Group>
+                        {editProdImagen && editProdImagen.trim() !== '' && !editProdImagen.includes('[object Object]') && (
+                            <div className="mt-2 text-center bg-light p-2 rounded border">
+                                <img src={editProdImagen.startsWith('data:image') || editProdImagen.includes('http') ? editProdImagen : `data:image/jpeg;base64,${editProdImagen}`} alt="Vista previa" style={{ height: '160px', borderRadius: '8px', objectFit: 'contain', border: '1px solid #f8bbd0' }} />
+                            </div>
+                        )}
+                        <Form.Group className="mb-2"><Form.Label className="fw-bold text-muted">Etiquetas</Form.Label><Form.Control type="text" value={editProdTags} onChange={e => setEditProdTags(e.target.value)} className="form-control-lg" /></Form.Group>
+                        <Form.Group className="mb-4"><Form.Label className="fw-bold text-muted">Descripción</Form.Label><Form.Control as="textarea" rows={2} value={editProdDescripcion} onChange={e => setEditProdDescripcion(e.target.value)} className="form-control-lg" /></Form.Group>
+                        <Button type="submit" style={{ backgroundColor: '#c2185b', border: 'none' }} className="w-100 fw-bold py-3 text-white shadow btn-lg">Aplicar Cambios de Sucursal.</Button>
                     </Form>
                 </Modal.Body>
             </Modal>

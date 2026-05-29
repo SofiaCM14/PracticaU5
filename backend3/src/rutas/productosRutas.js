@@ -71,7 +71,7 @@ const getUsuarioId = async (usuario) => {
 // ==========================================
 // 1. TABLA: auditoria (SOPORTE PAGINACIÓN Y BÚSQUEDAS)
 // ==========================================
-router.get('/auditoria', async (req, res) => {
+router.get('/auditoria', verificarToken, async (req, res) => {
     try {
         const pagina = parseInt(req.query.page) || 1;
         const limite = parseInt(req.query.limit) || 15;
@@ -550,6 +550,15 @@ router.put('/asistencia/atender/:id', async (req, res) => {
         await pool.query(`UPDATE asistencia_probadores SET estado = 'atendido', atendido_por = $1 WHERE id = $2;`, [parseInt(usuario_id || 4), parseInt(id)]);
         res.status(200).json({ ok: true });
     } catch (error) { res.status(500).json({ error: "Error al actualizar probador." }); }
+});
+
+router.put('/asistencia/recibir/:id', verificarToken, async (req, res) => {
+    const { id } = req.params;
+    const { usuario_id } = req.body;
+    try {
+        await pool.query(`UPDATE asistencia_probadores SET estado = 'recibido', atendido_por = $1 WHERE id = $2;`, [parseInt(usuario_id || 2), parseInt(id)]);
+        res.status(200).json({ ok: true, message: 'Cliente notificado de que vas en camino.' });
+    } catch (error) { res.status(500).json({ error: "Error al marcar como recibido." }); }
 });
 
 router.post('/usuarios/validar-autorizacion', verificarToken, async (req, res) => {
