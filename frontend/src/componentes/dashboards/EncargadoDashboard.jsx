@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Table, Badge, Form, Alert, Button, Card, Modal, InputGroup } from 'react-bootstrap';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
@@ -47,9 +47,17 @@ const EncargadoDashboard = () => {
     const [editProdStock, setEditProdStock] = useState('');
     const [editProdTalla, setEditProdTalla] = useState('M');
 
+    // 🔄 NUEVOS ESTADOS DE PAGINACIÓN Y BÚSQUEDA (ENCARGADOS)
+    const [paginaActual, setPaginaActual] = useState(1);
+    const [terminoBusqueda, setTerminoBusqueda] = useState('');
+    const [totalPaginas, setTotalPaginas] = useState(1);
+    const [cargandoMas, setCargandoMas] = useState(false);
+    const [limitePorPagina] = useState(12); // Consistente con el Backend
+
     const usuarioActivo = localStorage.getItem('username') || 'lesly';
     const rolActivo = localStorage.getItem('userRole') || 'encargado';
     const navigate = useNavigate();
+
     const handleLogout = () => {
         try {
             localStorage.clear();
@@ -65,16 +73,34 @@ const EncargadoDashboard = () => {
         return { 'Authorization': `Bearer ${token}` };
     };
 
-    // Sincronización robusta con AWS RDS
-    const cargarDatosEncargado = async () => {
+    // 🟢 FUNCIÓN CORE REESTRUCTURADA CON PARÁMETROS DINÁMICOS DE PAGINACIÓN Y BÚSQUEDA
+    const cargarDatosEncargado = useCallback(async (reiniciarProductos = false, paginaDestino = 1) => {
         try {
             const authHeaders = getAuthHeaders();
+            setCargandoMas(true);
+            const queryPage = reiniciarProductos ? 1 : paginaDestino;
+
+            // 📡 Consulta al Servidor AWS RDS con paginación y filtro en tiempo real
+            const resProd = await fetch(`http://34.219.103.28:3000/api/productos?page=${queryPage}&limit=${limitePorPagina}&search=${encodeURIComponent(terminoBusqueda)}`);
             
+            if (resProd.ok) {
+                const dataJSON = await resProd.json();
+                
+                if (reiniciarProductos || queryPage === 1) {
+                    setProductos(dataJSON.records || []);
+                    setPaginaActual(1);
+                } else {
+                    // Scrolling dinámico: Concatena los registros previos con los nuevos
+                    setProductos(prev => [...prev, ...(dataJSON.records || [])]);
+                    setPaginaActual(queryPage);
+                }
+                setTotalPaginas(dataJSON.meta.totalPages);
+            }
+            setCargandoMas(false);
+
+            // Cargar datos estáticos de los demás módulos
             const resAudit = await fetch('http://34.219.103.28:3000/api/productos/auditoria');
             if (resAudit.ok) setRecentActivity(await resAudit.json());
-
-            const resProd = await fetch('http://34.219.103.28:3000/api/productos');
-            if (resProd.ok) setProductos(await resProd.json());
 
             const resVentas = await fetch('http://34.219.103.28:3000/api/productos/ventas', {
                 method: 'GET',
@@ -96,24 +122,31 @@ const EncargadoDashboard = () => {
 
         } catch (error) {
             console.error("Error de conectividad AWS RDS en panel Encargado:", error);
+            setCargandoMas(false);
+        }
+    }, [terminoBusqueda, limitePorPagina, usuarioActivo]);
+
+    // Disparador reactivo para búsquedas en tiempo real
+    useEffect(() => {
+        if (vistaActiva === 'inventario') {
+            cargarDatosEncargado(true, 1);
+        }
+    }, [terminoBusqueda, vistaActiva]);
+
+    // Manejador para el botón "Cargar más prendas"
+    const handleCargarMasProductos = () => {
+        const siguientePagina = paginaActual + 1;
+        if (siguientePagina <= totalPaginas) {
+            cargarDatosEncargado(false, siguientePagina);
         }
     };
 
-    useEffect(() => { cargarDatosEncargado(); }, []);
-
-    useEffect(() => {
-        if (vistaActiva === 'mercancia') {
-            setNombre(''); setPrecio(''); setStock(''); setTalla('M');
-            setEditProdColor(''); setEditProdCategoria(''); setEditProdDescripcion('');
-            setEditProdImagen(''); setEditProdTags('');
-        }
-    }, [vistaActiva]);
-
-    // LÓGICA DE VENTAS REUTILIZADA DEL ADMIN
+    // LÓGICA DE VENTAS BLINDADA
     const handleCompraDirectaEncargado = async (e) => {
         e.preventDefault();
 
-        const productoExiste = productos.find(p => p.id === parseInt(idProductoVenta));
+        const productosArreglo = Array.isArray(productos) ? productos : [];
+        const productoExiste = productosArreglo.find(p => p.id === parseInt(idProductoVenta));
         if (!productoExiste) {
             Swal.fire('⚠️ Atención', 'El ID del producto no existe en el catálogo.', 'warning');
             return;
@@ -135,7 +168,7 @@ const EncargadoDashboard = () => {
         const datosVenta = {
             total: totalCobradoFinal,
             descuento_aplicado: totalDineroDescontado, 
-            usuario_id: 3, // ID de lesly en base de datos
+            usuario_id: 3, 
             carrito: [{ producto_id: productoExiste.id, cantidad: parseInt(cantidadVenta), precio_unitario: precioConDescuento }]
         };
 
@@ -148,19 +181,13 @@ const EncargadoDashboard = () => {
 
             if (res.ok) {
                 const data = await res.json();
-                setIdProductoVenta('');
-                setCantidadVenta('');
-                setDescuentoSeleccionado('0'); 
-                await cargarDatosEncargado(); 
+                setIdProductoVenta(''); setCantidadVenta(''); setDescuentoSeleccionado('0'); 
+                await cargarDatosEncargado(true, 1); 
                 
                 Swal.fire({
-                    toast: true,
-                    position: 'top-end',
-                    icon: 'success',
+                    toast: true, position: 'top-end', icon: 'success',
                     title: `Venta registrada con éxito (Folio #V-${data.venta_id})`,
-                    showConfirmButton: false,
-                    timer: 2000,
-                    timerProgressBar: true
+                    showConfirmButton: false, timer: 2000, timerProgressBar: true
                 });
             }
         } catch (error) {
@@ -168,24 +195,19 @@ const EncargadoDashboard = () => {
         }
     };
 
-    // VER DETALLES DE TICKET MODAL INDIVIDUAL
     const handleVerDetallesTicket = async (id) => {
         try {
             setFolioSeleccionado(id);
             const res = await fetch(`http://34.219.103.28:3000/api/productos/ventas/detalles/${id}`, {
-                method: 'GET',
-                headers: getAuthHeaders()
+                method: 'GET', headers: getAuthHeaders()
             });
             if (res.ok) {
                 setDetallesTicket(await res.json()); 
                 setShowTicketModal(true);
             }
-        } catch (error) {
-            console.error(error);
-        }
+        } catch (error) { console.error(error); }
     };
 
-    // INYECTAR NUEVA MERCANCÍA AL CATÁLOGO GLOBAL
     const handleAddProductEncargado = async (e) => {
         e.preventDefault();
         try {
@@ -206,14 +228,11 @@ const EncargadoDashboard = () => {
             if (response.ok) {
                 setAlertMessage(`¡Prenda "${nombre}" inyectada con éxito! ✨`);
                 setVistaActiva('inventario');
-                cargarDatosEncargado();
+                cargarDatosEncargado(true, 1);
             }
-        } catch (error) {
-            setAlertMessage('Error de comunicación con el servidor.');
-        }
+        } catch (error) { setAlertMessage('Error de comunicación con el servidor.'); }
     };
 
-    // PRECARGAR FORMULARIO MODAL DE PRODUCTO (CON BOTÓN DE ACTUALIZAR ACTUAL)
     const abrirFormularioProducto = (p) => {
         setSelectedProd(p);
         setEditProdNombre(p.nombre || '');
@@ -229,7 +248,6 @@ const EncargadoDashboard = () => {
         setShowProdModal(true);
     };
 
-    // CONVERSIÓN AUTOMÁTICA A BASE64 EN FLOTANTE
     const handleFileChange = (e) => {
         const file = e.target.files[0]; 
         if (file) {
@@ -239,15 +257,12 @@ const EncargadoDashboard = () => {
         }
     };
 
-    // GUARDAR CAMBIOS DE EDICIÓN FLOTANTE PRENDAS
     const handleSaveEditProduct = async (e) => {
         e.preventDefault();
         try {
             const tagsArray = editProdTags.split(',').map(t => t.trim()).filter(t => t !== '');
             let imagenAEnviar = editProdImagen;
-            if (typeof imagenAEnviar === 'object' || imagenAEnviar.includes('[object Object]')) {
-                imagenAEnviar = '';
-            }
+            if (typeof imagenAEnviar === 'object' || imagenAEnviar.includes('[object Object]')) imagenAEnviar = '';
 
             const response = await fetch(`http://34.219.103.28:3000/api/productos/${selectedProd.id}`, {
                 method: 'PUT',
@@ -262,14 +277,11 @@ const EncargadoDashboard = () => {
             if (response.ok) {
                 setAlertMessage(`¡Cambios guardados en "${editProdNombre}" exitosamente! 📝`);
                 setShowProdModal(false);
-                cargarDatosEncargado(); 
+                cargarDatosEncargado(true, 1); 
             }
-        } catch (error) {
-            console.error(error);
-        }
+        } catch (error) { console.error(error); }
     };
 
-    // APERTURA Y ARQUEO DE CAJA
     const handleAbrirCajaDefinitivo = async (e) => {
         e.preventDefault();
         const fondoNum = parseFloat(montoInicialInput);
@@ -283,8 +295,7 @@ const EncargadoDashboard = () => {
             });
             if (response.ok) {
                 Swal.fire('¡Turno Abierto!', `Fondo inicial registrado: $${fondoNum.toFixed(2)}`, 'success');
-                setShowModalAbrir(false);
-                setMontoInicialInput('');
+                setShowModalAbrir(false); setMontoInicialInput('');
                 cargarDatosEncargado();
             }
         } catch (error) { console.error(error); }
@@ -292,39 +303,30 @@ const EncargadoDashboard = () => {
 
     const handleCerrarCaja = async () => {
         Swal.fire({
-            title: '¿Realizar corte de caja?',
-            text: "Se sumarán todas las transacciones de este turno.",
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d32f2f',
-            confirmButtonText: 'Sí, cerrar caja 🔒'
+            title: '¿Realizar corte de caja?', text: "Se sumarán todas las transacciones de este turno.", icon: 'warning',
+            showCancelButton: true, confirmButtonColor: '#d32f2f', confirmButtonText: 'Sí, cerrar caja 🔒'
         }).then(async (result) => {
             if (result.isConfirmed) {
-                try {
-                    const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/cerrar-caja', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                        body: JSON.stringify({ usuario_id: 3 }) 
+                const response = await fetch('http://34.219.103.28:3000/api/productos/movimientos-caja/cerrar-caja', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                    body: JSON.stringify({ usuario_id: 3 }) 
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    Swal.fire({
+                        title: '¡Caja Cerrada!',
+                        html: `<div style="text-align: left; font-size: 16px;">💰 <b>Ventas:</b> $${data.ventas_del_dia.toFixed(2)}<br/>💵 <b>Total Caja:</b> $${data.monto_final.toFixed(2)}</div>`,
+                        icon: 'success'
                     });
-                    const data = await response.json();
-                    if (response.ok) {
-                        Swal.fire({
-                            title: '¡Caja Cerrada!',
-                            html: `<div style="text-align: left; font-size: 16px;">💰 <b>Ventas:</b> $${data.ventas_del_dia.toFixed(2)}<br/>💵 <b>Total Caja:</b> $${data.monto_final.toFixed(2)}</div>`,
-                            icon: 'success'
-                        });
-                        cargarDatosEncargado();
-                    }
-                } catch (e) { console.error(e); }
+                    cargarDatosEncargado();
+                }
             }
         });
     };
 
     const handleImprimirTicketCorte = async (datosCaja) => {
         try {
-            const response = await fetch(`http://34.219.103.28:3000/api/productos/movimientos-caja/detalles-ticket/${datosCaja.id}`, {
-                method: 'GET', headers: getAuthHeaders()
-            });
+            const response = await fetch(`http://34.219.103.28:3000/api/productos/movimientos-caja/detalles-ticket/${datosCaja.id}`, { method: 'GET', headers: getAuthHeaders() });
             const articulosVendidos = await response.json();
             const fondoInicial = parseFloat(datosCaja.monto_inicial) || 0;
             const montoFinal = parseFloat(datosCaja.monto_final) || 0;
@@ -393,32 +395,28 @@ const EncargadoDashboard = () => {
                         </h1>
                     </Col>
                     <Col className="p-0 text-end" style={{ minWidth: '160px' }}>
-                        <Button
-                            variant="light"
-                            onClick={handleLogout}
-                            style={{ borderRadius: '20px', padding: '8px 20px', paddingTop: '6px', fontSize: '1.05rem', fontWeight: 'bold', color: '#c2185b' }}
-                        >
+                        <Button variant="light" onClick={handleLogout} style={{ borderRadius: '20px', padding: '8px 20px', fontSize: '1.05rem', fontWeight: 'bold', color: '#c2185b' }}>
                             Cerrar Sesión
                         </Button>
                     </Col>
                 </Row>
             </header>
 
-            {/* BARRA DE NAVEGACIÓN COMPARTIDA (LETRA ROBUSTA) */}
+            {/* BARRA DE NAVEGACIÓN COMPARTIDA */}
             <nav className="dashboard-menu" style={{ maxWidth: '100%', margin: 0 }}>
-                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'inventario' ? 'active' : ''}`} onClick={() => { setVistaActiva('inventario'); cargarDatosEncargado(); }}>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'inventario' ? 'active' : ''}`} onClick={() => { setProductos([]); setVistaActiva('inventario'); cargarDatosEncargado(true, 1); }}>
                     👗 Prendas
                 </button>
-                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'mercancia' ? 'active' : ''}`} onClick={() => { setVistaActiva('mercancia'); cargarDatosEncargado(); }}>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'mercancia' ? 'active' : ''}`} onClick={() => { setVistaActiva('mercancia'); }}>
                     🚛 Recepción de Mercancía
                 </button>
-                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'devoluciones' ? 'active' : ''}`} onClick={() => { setVistaActiva('devoluciones'); cargarDatosEncargado(); }}>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'devoluciones' ? 'active' : ''}`} onClick={() => { setVistaActiva('devoluciones'); }}>
                     ↩️ Devoluciones
                 </button>
-                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'ventas' ? 'active' : ''}`} onClick={() => { setVistaActiva('ventas'); cargarDatosEncargado(); }}>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'ventas' ? 'active' : ''}`} onClick={() => { setVistaActiva('ventas'); }}>
                     🛍️ Ventas
                 </button>
-                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'caja' ? 'active' : ''}`} onClick={() => { setVistaActiva('caja'); cargarDatosEncargado(); }}>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'caja' ? 'active' : ''}`} onClick={() => { setVistaActiva('caja'); }}>
                     💵 Control de Caja
                 </button>
             </nav>
@@ -436,11 +434,35 @@ const EncargadoDashboard = () => {
                     </Row>
                 )}
 
+                {/* VISTA ENCARGADO: INVENTARIO CON FILTRADO CLOUD Y CARGA SECUENCIAL */}
                 {vistaActiva === 'inventario' && (
                     <div>
-                        <h4 className="fw-bold mb-4" style={{ color: '#c2185b' }}>👗 Catálogo de Prendas en Existencia</h4>
+                        <Row className="align-items-center mb-4">
+                            <Col xs={12} lg={6}>
+                                <h4 className="fw-bold m-0" style={{ color: '#c2185b' }}>
+                                    👗 Catálogo de Prendas en Existencia ({productos.length} visibles)
+                                </h4>
+                            </Col>
+                            {/* 🔍 INPUT DE FILTRADO FLOTANTE */}
+                            <Col xs={12} lg={6} className="mt-3 mt-lg-0">
+                                <InputGroup className="shadow-sm">
+                                    <InputGroup.Text className="bg-white border-end-0 text-muted fs-5">🔍</InputGroup.Text>
+                                    <Form.Control
+                                        type="text"
+                                        placeholder="Buscar por artículo, categoría o tag..."
+                                        className="border-start-0 py-2 fs-5"
+                                        value={terminoBusqueda}
+                                        onChange={e => setTerminoBusqueda(e.target.value)}
+                                    />
+                                    {terminoBusqueda && (
+                                        <Button variant="outline-secondary" className="bg-white border-start-0 text-muted" onClick={() => setTerminoBusqueda('')}>✕</Button>
+                                    )}
+                                </InputGroup>
+                            </Col>
+                        </Row>
+
                         <Row className="g-4">
-                            {productos.map((p, i) => {
+                            {Array.isArray(productos) && productos.map((p, i) => {
                                 const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23ad1457' text-anchor='middle'>Prenda SmartBoutique</text></svg>";
                                 const tagsArray = p.tags && Array.isArray(p.tags) ? p.tags : [];
                                 let imagenSrc = fallbackImg;
@@ -454,28 +476,33 @@ const EncargadoDashboard = () => {
                                 }
 
                                 return (
-                                    <Col xs={12} md={6} lg={2} key={i} className="d-flex">
-                                        <Card style={styles.cardBoutique} className="shadow-sm h-100 overflow-hidden bg-white border-0">
-                                            <div style={{ width: '100%', minHeight: '200px', overflow: 'hidden' }}>
-                                                <Card.Img src={imagenSrc} alt={p.nombre || 'Prenda'} style={{ width: '100%', height: '220px', objectFit: 'cover' }} />
+                                    <Col xs={12} sm={6} md={4} lg={3} xl={2} key={i} className="d-flex">
+                                        <Card style={styles.cardBoutique} className="shadow-sm h-100 overflow-hidden bg-white border-0 w-100">
+                                            <div style={{ width: '100%', height: '220px', overflow: 'hidden', backgroundColor: '#fffdfd', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '10px' }}>
+                                                <Card.Img src={imagenSrc} alt={p.nombre || 'Prenda'} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} onError={(e) => { e.target.src = fallbackImg; }} />
                                             </div>
                                             <Card.Body className="d-flex flex-column justify-content-between p-3" style={{ fontSize: '1.05rem' }}>
                                                 <div>
-                                                    <Card.Title className="fw-bold text-dark fs-5 mb-1 text-truncate">{p.nombre}</Card.Title>
-                                                    <Card.Text className="text-muted mb-3 text-truncate-2" style={{ fontSize: '0.92rem', minHeight: '40px', lineHeight: '1.3' }}>{p.descripcion || 'Sin descripción asignada todavía.'}</Card.Text>
-                                                </div>
-                                                <div className="mt-auto pt-2">
                                                     <div className="d-flex justify-content-between align-items-center mb-2">
-                                                        <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '60%' }}>
-                                                            {tagsArray.slice(0, 2).map((t, idx) => <Badge key={idx} bg="light" text="secondary" className="border small">#{t}</Badge>)}
-                                                        </div>
-                                                        <div className="text-end">
-                                                            <span className="d-block text-muted" style={{ fontSize: '0.65rem', fontWeight: 'bold' }}>PRECIO PISO</span>
-                                                            <h4 className="fw-bold text-danger m-0 font-monospace" style={{ fontSize: '1.45rem' }}>${parseFloat(p.precio || 0).toFixed(2)}</h4>
-                                                        </div>
+                                                        <span className="text-muted small fw-bold text-uppercase">{p.categoria || 'Moda'}</span>
+                                                        <Badge bg="light" text="dark" className="border">#{p.id}</Badge>
                                                     </div>
-                                                    <Button style={{ backgroundColor: '#c2185b', borderColor: '#c2185b', borderRadius: '8px', fontSize: '1rem' }} className="w-100 fw-bold py-2 text-white shadow-sm mt-2" onClick={() => abrirFormularioProducto(p)}>
-                                                        ⚙ Actualizar Prenda
+                                                    <Card.Title className="fw-bold text-dark fs-5 mb-1 text-truncate">{p.nombre}</Card.Title>
+                                                    <Card.Text className="text-muted mb-2 small text-truncate-2" style={{ minHeight: '36px' }}>{p.descripcion || 'Sin descripción.'}</Card.Text>
+                                                    <div className="d-flex flex-wrap gap-1 mb-2">
+                                                        <Badge bg="dark" className="p-1 small">Talla: {p.talla || 'M'}</Badge>
+                                                        <Badge bg={p.stock > 5 ? 'success' : 'danger'} className="p-1 small">Stock: {p.stock} pz</Badge>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-2">
+                                                    <div className="d-flex justify-content-between align-items-center mb-2">
+                                                        <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '50%' }}>
+                                                            {tagsArray.slice(0, 2).map((t, idx) => <Badge key={idx} bg="light" text="secondary" className="border p-1" style={{ fontSize: '0.75rem' }}>#{t}</Badge>)}
+                                                        </div>
+                                                        <h4 className="fw-bold text-danger m-0 font-monospace">${parseFloat(p.precio || 0).toFixed(2)}</h4>
+                                                    </div>
+                                                    <Button style={{ backgroundColor: '#c2185b', borderColor: '#c2185b', borderRadius: '8px' }} className="w-100 fw-bold py-2 text-white shadow-sm" onClick={() => abrirFormularioProducto(p)}>
+                                                        ⚙️ Actualizar Prenda
                                                     </Button>
                                                 </div>
                                             </Card.Body>
@@ -484,13 +511,29 @@ const EncargadoDashboard = () => {
                                 );
                             })}
                         </Row>
+
+                        {/* 👇 BOTÓN DE INFRAESTRUCTURA DE ARRASTRE DE PÁGINAS */}
+                        {paginaActual < totalPaginas && (
+                            <div className="text-center mt-5">
+                                <Button 
+                                    size="lg" 
+                                    variant="outline-secondary" 
+                                    className="px-5 py-3 fw-bold shadow-sm" 
+                                    style={{ borderRadius: '30px', color: '#c2185b', borderColor: '#c2185b' }}
+                                    onClick={handleCargarMasProductos}
+                                    disabled={cargandoMas}
+                                >
+                                    {cargandoMas ? '⏳ Escaneando almacén...' : '👇 Cargar más prendas'}
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 )}
 
                 {/* VISTA B: RECEPCIÓN DE MERCANCÍA INTEGRAL */}
                 {vistaActiva === 'mercancia' && (
-                    <div className="mx-auto animate__animated animate__fadeIn" style={{ maxWidth: '900px', background: '#e68fbf', borderRadius: '18px', padding: '35px', border: '1px solid #f8bbd0', boxShadow: '0 4px 18px rgba(0,0,0,0.05)', fontSize: '1.05rem' }}>
-                        <div className="mb-4 text-center pb-2 border-bottom"><h3 className="fw-bold mb-1" style={{ color: '#c2185b' }}>Agregar Nueva Prenda.</h3></div>
+                    <div className="mx-auto" style={{ maxWidth: '900px', background: '#e68fbf', borderRadius: '18px', padding: '35px', border: '1px solid #f8bbd0' }}>
+                        <div className="mb-4 text-center pb-2 border-bottom"><h3 className="fw-bold mb-1" style={{ color: '#c2185b' }}>Agregar Nueva Prenda</h3></div>
                         <Form onSubmit={handleAddProductEncargado}>
                             <Row className="g-3 mb-3">
                                 <Col md={6}><Form.Group><Form.Label className="fw-bold text-muted">Nombre del Artículo</Form.Label><Form.Control type="text" value={nombre} onChange={e => setNombre(e.target.value)} required placeholder="Ej: Falda mezclilla" className="form-control-lg" /></Form.Group></Col>
@@ -505,18 +548,14 @@ const EncargadoDashboard = () => {
                             <Form.Group className="mb-3"><Form.Label className="fw-bold text-muted">Cargar Fotografía</Form.Label><Form.Control type="file" accept="image/*" onChange={handleFileChange} className="form-control-lg" /></Form.Group>
                             <Form.Group className="mb-3"><Form.Label className="fw-bold text-muted">Etiquetas (Separadas por comas)</Form.Label><Form.Control type="text" value={editProdTags} onChange={e => setEditProdTags(e.target.value)} placeholder="mezclilla, casual, moda" className="form-control-lg" /></Form.Group>
                             <Form.Group className="mb-4"><Form.Label className="fw-bold text-muted">Descripción del Producto</Form.Label><Form.Control as="textarea" rows={2} value={editProdDescripcion} onChange={e => setEditProdDescripcion(e.target.value)} className="form-control-lg" /></Form.Group>
-                            <Button type="submit" className="w-100 fw-bold py-3 text-white shadow" style={{ backgroundColor: '#c2185b', border: 'none', borderRadius: '10px', fontSize: '1.15rem' }}> 📦 Guardar Nuevo Producto.</Button>
+                            <Button type="submit" className="w-100 fw-bold py-3 text-white shadow" style={{ backgroundColor: '#c2185b', border: 'none', borderRadius: '10px' }}> 📦 Guardar Nuevo Producto</Button>
                         </Form>
                     </div>
                 )}
 
-                {/* VISTA C: VISTA CRUZADA DE MOVIMIENTOS (AUDITORÍA LOCAL) */}
-                
-                
-
                 {/* VISTA D: DEVOLUCIONES DE MERCANCÍA */}
                 {vistaActiva === 'devoluciones' && (
-                    <div className="animate__animated animate__fadeIn" style={{ fontSize: '1.05rem' }}>
+                    <div style={{ fontSize: '1.05rem' }}>
                         <h4 className="fw-bold mb-3" style={{ color: '#c2185b' }}>↩️ Registro de Devoluciones</h4>
                         <Card className="mb-4 shadow-sm border-0" style={{ borderRadius: '14px', backgroundColor: '#f1b2d2', border: '1px solid #f8bbd0' }}>
                             <Card.Body className="p-4">
@@ -548,14 +587,12 @@ const EncargadoDashboard = () => {
                             </Card.Body>
                         </Card>
 
-                        {/* TABLA HISTÓRICA */}
                         <div className="bg-white rounded-4 p-3 shadow-sm border">
                             <h6 className="fw-bold text-secondary mb-3 fs-5">📋 Historial de Devoluciones</h6>
-
                             <Table responsive hover className="text-center align-middle border mt-4">
                                 <thead className="table-light"><tr><th>Folio Dev</th><th>Ticket Orig.</th><th>Prenda</th><th>Cant.</th><th>Motivo</th><th>Reembolso</th><th>Método</th><th>Autorizó</th></tr></thead>
                                 <tbody>
-                                    {devolucionesData.length === 0 ? <tr><td colSpan="8" className="text-muted py-3">No hay devoluciones registradas hoy.</td></tr> : devolucionesData.map((dev, i) => (
+                                    {devolucionesData.length === 0 ? <tr><td colSpan="8" className="text-muted py-3">No hay devoluciones registradas hoy.</td></tr> : DevolucionesData.map((dev, i) => (
                                         <tr key={i}><td>#DEV-{dev.id}</td><td>#V-{dev.venta_id}</td><td className="fw-bold">{dev.producto_detalle}</td><td>{dev.cantidad} pz</td><td>{dev.motivo_devolucion}</td><td className="text-danger fw-bold">-${parseFloat(dev.monto_reembolsado).toFixed(2)}</td><td><Badge bg="secondary">{dev.tipo_reembolso}</Badge></td><td><Badge bg="dark">lesly</Badge></td></tr>
                                     ))}
                                 </tbody>
@@ -564,9 +601,9 @@ const EncargadoDashboard = () => {
                     </div>
                 )}
 
-                {/* VISTA E: TERMINAL DE VENTAS NORMAL (COBRO DIRECTO LIBRE) */}
+                {/* VISTA E: TERMINAL DE VENTAS NORMAL */}
                 {vistaActiva === 'ventas' && (
-                    <div className="animate__animated animate__fadeIn" style={{ fontSize: '1.05rem' }}>
+                    <div style={{ fontSize: '1.05rem' }}>
                         <h4 className="fw-bold mb-3" style={{ color: '#c2185b' }}>🛒 Terminal de Cobro Exprés (Supervisor Rango 2)</h4>
                         <Form onSubmit={handleCompraDirectaEncargado} className="row g-3 mb-5 p-3 bg-light rounded align-items-end m-0 border shadow-sm">
                             <Col md={2}><Form.Group><Form.Label className="fw-bold text-muted mb-1">ID Producto</Form.Label><Form.Control type="number" placeholder="Ej: 3" value={idProductoVenta} onChange={e => setIdProductoVenta(e.target.value)} className="form-control-lg text-center fw-bold" required /></Form.Group></Col>
@@ -587,11 +624,11 @@ const EncargadoDashboard = () => {
                         </Form>
 
                         <h4 className="fw-bold mb-3 mt-4" style={{ color: '#c2185b' }}>💰 Historial de Ventas del Turno Activo</h4>
-                        <Table responsive hover className="text-center align-middle mb-0 table-borderless border" style={{ fontSize: '1.1rem' }}>
-                            <thead className="table-light"><tr style={{ height: '42px', fontSize: '1.15rem' }}><th>Folio</th><th>Vendedor</th><th>Rol</th><th>Descuento</th><th>Total Cobrado</th><th>Fecha y Hora</th><th>Acción</th></tr></thead>
+                        <Table responsive hover className="text-center align-middle mb-0 border" style={{ fontSize: '1.1rem' }}>
+                            <thead className="table-light"><tr><th>Folio</th><th>Vendedor</th><th>Rol</th><th>Descuento</th><th>Total Cobrado</th><th>Fecha y Hora</th><th>Acción</th></tr></thead>
                             <tbody>
                                 {ventasData.length === 0 ? <tr><td colSpan="7" className="text-muted py-4 fs-5">No hay ventas registradas en este turno de caja.</td></tr> : ventasData.map((venta, i) => (
-                                    <tr key={i} className="border-bottom" style={{ height: '46px' }}>
+                                    <tr key={i} className="border-bottom">
                                         <td className="fw-bold text-secondary">#V-{venta.id}</td>
                                         <td className="fw-bold">{venta.username || `Asesor: ${venta.usuario_id}`}</td>
                                         <td><Badge bg="warning" text="dark" className="fs-6">{venta.rol || 'vendedor'}</Badge></td>
@@ -608,7 +645,7 @@ const EncargadoDashboard = () => {
 
                 {/* VISTA F: CONTROL DE CAJA CHICA */}
                 {vistaActiva === 'caja' && (
-                    <div className="animate__animated animate__fadeIn p-2" style={{ fontSize: '1.05rem' }}>
+                    <div className="p-2" style={{ fontSize: '1.05rem' }}>
                         <h4 className="fw-bold mb-4" style={{ color: '#c2185b' }}>💵 Control Financiero y Arqueos de Turno Local</h4>
                         <div className="row g-3 justify-content-center text-center mb-5">
                             <div className="col-12 col-md-3">
@@ -638,10 +675,9 @@ const EncargadoDashboard = () => {
                             </div>
                         </div>
 
-                        {/* HISTORIAL GENERAL */}
                         <div className="bg-white rounded-4 p-3 shadow-sm border">
                             <h6 className="fw-bold text-secondary mb-3 fs-5">📋 Historial General de Arqueos locales</h6>
-                            <Table responsive hover className="text-center align-middle mb-0 table-borderless" style={{ fontSize: '1.05rem' }}>
+                            <Table responsive hover className="text-center align-middle mb-0 table-borderless">
                                 <thead className="table-light"><tr><th>ID Corte</th><th>Operador ID</th><th>F. Apertura</th><th>Monto Inicial</th><th>F. Cierre</th><th>Monto Final</th><th>Estado</th></tr></thead>
                                 <tbody>
                                     {movimientosCajaData.map((caja, i) => (
@@ -662,9 +698,9 @@ const EncargadoDashboard = () => {
                 )}
             </div>
 
-            {/* ====== MODAL: TICKET INDIVIDUAL IMPRIMIBLE (REUTILIZADO) ====== */}
+            {/* ====== MODAL: TICKET INDIVIDUAL IMPRIMIBLE ====== */}
             <Modal show={showTicketModal} onHide={() => setShowTicketModal(false)} centered size="sm">
-                <Modal.Body className="p-4" style={{ fontFamily: 'Courier New, Courier, monospace', backgroundColor: '#ffffff', fontSize: '1.05rem' }}>
+                <Modal.Body className="p-4" style={{ fontFamily: 'Courier New, monospace', backgroundColor: '#ffffff', fontSize: '1.05rem' }}>
                     <div className="d-flex gap-2 justify-content-center mb-4 d-print-none">
                         <Button variant="success" size="md" className="fw-bold px-4 shadow-sm border-0" style={{ backgroundColor: '#2e7d32' }} onClick={() => window.print()}>🖨️ Imprimir</Button>
                         <Button variant="secondary" size="md" className="fw-bold px-4 shadow-sm border-0" style={{ backgroundColor: '#757575' }} onClick={() => setShowTicketModal(false)}>❌ Cerrar</Button>
@@ -690,12 +726,12 @@ const EncargadoDashboard = () => {
                     <div className="my-2" style={{ borderTop: '1px dashed #ced4da' }}></div>
                     <div style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
                         <div className="d-flex justify-content-between text-muted"><span>SUBTOTAL:</span><span>${detallesTicket.reduce((acc, item) => acc + (item.cantidad * parseFloat(item.precio_unitario)), 0).toFixed(2)}</span></div>
-                        <div className="d-flex justify-content-between fw-bold mb-3" style={{ fontSize: '0.95rem' }}><span>TOTAL COBRADO:</span><span class="text-success">${detallesTicket.reduce((acc, item) => acc + (item.cantidad * parseFloat(item.precio_unitario)), 0).toFixed(2)}</span></div>
+                        <div className="d-flex justify-content-between fw-bold mb-3" style={{ fontSize: '0.95rem' }}><span>TOTAL COBRADO:</span><span className="text-success">${detallesTicket.reduce((acc, item) => acc + (item.cantidad * parseFloat(item.precio_unitario)), 0).toFixed(2)}</span></div>
                     </div>
                 </Modal.Body>
             </Modal>
 
-            {/* ====== MODAL: APERTURA DE TURNO ENCARGADO ====== */}
+            {/* ====== MODAL: APERTURA DE CAJA ====== */}
             <Modal show={showModalAbrir} onHide={() => setShowModalAbrir(false)} centered backdrop="static">
                 <Modal.Header closeButton className="border-0 pb-0"><Modal.Title className="fw-bold fs-5" style={{ color: '#ad1457' }}>🔑 Apertura de Caja - Turno Supervisor</Modal.Title></Modal.Header>
                 <form onSubmit={handleAbrirCajaDefinitivo}>
@@ -737,6 +773,7 @@ const EncargadoDashboard = () => {
                     </Form>
                 </Modal.Body>
             </Modal>
+
             <footer className="dashboard-footer">
                 <div className="dashboard-footer-title">© 2026 SmartBoutique</div>
                 <div className="dashboard-footer-subtitle">Gestión de tienda inteligente • Control operacional</div>

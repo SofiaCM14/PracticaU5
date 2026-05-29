@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Table, Badge, Form, Alert, Button, Card, Modal, InputGroup } from 'react-bootstrap';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
@@ -20,9 +20,17 @@ const ClienteDashboard = () => {
     const [imagenPrendaOutfit, setImagenPrendaOutfit] = useState('');
     const [outfitSugerido, setOutfitSugerido] = useState(null);
 
+    // 🔄 NUEVOS ESTADOS DE PAGINACIÓN Y BÚSQUEDA (CLIENTES)
+    const [paginaActual, setPaginaActual] = useState(1);
+    const [terminoBusqueda, setTerminoBusqueda] = useState('');
+    const [totalPaginas, setTotalPaginas] = useState(1);
+    const [cargandoMas, setCargandoMas] = useState(false);
+    const [limitePorPagina] = useState(12); // Consistente con el Backend
+
     const usuarioActivo = localStorage.getItem('username') || 'sofia';
-    const usuarioIdReal = localStorage.getItem('userId') ? parseInt(localStorage.getItem('userId')) : 5; // Tu ID Sofía de la captura
+    const usuarioIdReal = localStorage.getItem('userId') ? parseInt(localStorage.getItem('userId')) : 5; 
     const navigate = useNavigate();
+
     const handleLogout = () => {
         try {
             localStorage.clear();
@@ -38,26 +46,57 @@ const ClienteDashboard = () => {
         return { 'Authorization': `Bearer ${token}` };
     };
 
-    // Sincronizar catálogo global de AWS RDS
-    const sincronizarCliente = async () => {
+    // 🟢 FUNCIÓN CORE DE REFRESCO ADAPTADA CON SCROLLING Y BÚSQUEDA MULTI-CRIFADO
+    const sincronizarCliente = useCallback(async (reiniciarProductos = false, paginaDestino = 1) => {
         try {
-            const resProd = await fetch('http://34.219.103.28:3000/api/productos');
-            if (resProd.ok) setProductos(await resProd.json());
+            setCargandoMas(true);
+            const queryPage = reiniciarProductos ? 1 : paginaDestino;
+            
+            // 📡 Consulta al Servidor AWS RDS con parámetros dinámicos
+            const resProd = await fetch(`http://34.219.103.28:3000/api/productos?page=${queryPage}&limit=${limitePorPagina}&search=${encodeURIComponent(terminoBusqueda)}`);
+            
+            if (resProd.ok) {
+                const dataJSON = await resProd.json();
+                
+                if (reiniciarProductos || queryPage === 1) {
+                    setProductos(dataJSON.records || []);
+                    setPaginaActual(1);
+                } else {
+                    // Carga secuencial: Une las tendencias anteriores con las nuevas
+                    setProductos(prev => [...prev, ...(dataJSON.records || [])]);
+                    setPaginaActual(queryPage);
+                }
+                setTotalPaginas(dataJSON.meta.totalPages);
+            }
+            setCargandoMas(false);
 
-            // Jalar llamadas de probadores para monitorear el estado actual
+            // Jalar llamadas de probadores de forma paralela
             const resAsis = await fetch('http://34.219.103.28:3000/api/productos/asistencia');
             if (resAsis.ok) {
-                const llamadas = await resAsis.json();
-                setAsistencias(llamadas);
+                setAsistencias(await resAsis.json());
             }
         } catch (e) {
             console.error("Error sincronizando espacio del cliente:", e);
+            setCargandoMas(false);
+        }
+    }, [terminoBusqueda, limitePorPagina]);
+
+    // Disparador reactivo para búsquedas en tiempo real
+    useEffect(() => {
+        if (vistaActiva === 'catalogo') {
+            sincronizarCliente(true, 1);
+        }
+    }, [terminoBusqueda, vistaActiva]);
+
+    // Manejador del botón inferior "Cargar más prendas"
+    const handleCargarMasProductos = () => {
+        const siguientePagina = paginaActual + 1;
+        if (siguientePagina <= totalPaginas) {
+            sincronizarCliente(false, siguientePagina);
         }
     };
 
-    useEffect(() => { sincronizarCliente(); }, []);
-
-    // 🔔 1. ENVIAR LLAMADA DE ASISTENCIA VINCULADA CON VENDEDOR EN TIEMPO REAL
+    // 🔔 ENVIAR LLAMADA DE ASISTENCIA EN PROBADORES
     const handleSolicitarAsistencia = async (e) => {
         e.preventDefault();
         if (!notaAsistencia.trim()) {
@@ -65,7 +104,6 @@ const ClienteDashboard = () => {
             return;
         }
 
-        // Armamos el JSON para la tabla asistencia_probadores
         const payload = {
             probador_id: probadorSeleccionado,
             nota: notaAsistencia,
@@ -81,16 +119,15 @@ const ClienteDashboard = () => {
 
             if (res.ok) {
                 const nuevaAlertaLocal = {
-                id: Date.now(), // ID temporal para evitar errores de llave en el ciclo map
-                probador_id: probadorSeleccionado,
-                nota: notaAsistencia,
-                estado: 'pendiente',
-                fecha_solicitud: new Date().toISOString(),
-                usuario_id: usuarioIdReal
-            };
+                    id: Date.now(), 
+                    probador_id: probadorSeleccionado,
+                    nota: notaAsistencia,
+                    estado: 'pendiente',
+                    fecha_solicitud: new Date().toISOString(),
+                    usuario_id: usuarioIdReal
+                };
 
-            setAsistencias([nuevaAlertaLocal, ...asistencias]);
-            
+                setAsistencias([nuevaAlertaLocal, ...asistencias]);
                 Swal.fire({
                     title: '¡Alerta Enviada! 🔔',
                     text: `El asesor de piso ha recibido la notificación de la Cabina ${probadorSeleccionado}. Ya va en camino.`,
@@ -98,14 +135,14 @@ const ClienteDashboard = () => {
                     confirmButtonColor: '#e91e63'
                 });
                 setNotaAsistencia('');
-                sincronizarCliente();
+                sincronizarCliente(true, 1);
             }
         } catch (err) {
             Swal.fire('❌ Error', 'No se pudo conectar con el canal de asistencia.', 'error');
         }
     };
 
-    // 🛍️ 2. AÑADIR ARTÍCULO AL CARRITO DE DESEOS LOCAL/PERSISTIDO
+    // 🛍️ AÑADIR ARTÍCULO AL CARRITO
     const handleAgregarAlCarrito = (p) => {
         if (p.stock <= 0) {
             Swal.fire('⚠️ Agotado', 'Esta prenda no cuenta con existencias en este momento.', 'warning');
@@ -137,16 +174,16 @@ const ClienteDashboard = () => {
         setCarritoDeseos(carritoDeseos.filter(item => item.id !== id));
     };
 
-    // 📷 3. RECOMENDADOR DE OUTFITS CON CARGA BASE64
+    // 📷 RECOMENDADOR DE OUTFITS MOCK
     const handleUploadPrendaOutfit = (e) => {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onloadend = () => {
                 setImagenPrendaOutfit(String(reader.result));
-                // Mock de combinador inteligente de prendas de la base de datos
-                if (productos.length > 0) {
-                    const randomMatch = productos[Math.floor(Math.random() * productos.length)];
+                const productosArreglo = Array.isArray(productos) ? productos : [];
+                if (productosArreglo.length > 0) {
+                    const randomMatch = productosArreglo[Math.floor(Math.random() * productosArreglo.length)];
                     setOutfitSugerido(randomMatch);
                 }
             };
@@ -163,24 +200,12 @@ const ClienteDashboard = () => {
 
     const styles = {
         drawer: {
-            position: 'fixed',
-            top: 0,
-            right: 0,
-            height: '100vh',
-            width: 'min(420px, 95vw)',
-            backgroundColor: '#ffffff',
-            zIndex: 1040,
-            boxShadow: '-12px 0 35px rgba(0,0,0,0.18)',
-            transition: 'transform 0.25s ease',
-            overflowY: 'auto',
+            position: 'fixed', top: 0, right: 0, height: '100vh', width: 'min(420px, 95vw)',
+            backgroundColor: '#ffffff', zIndex: 1040, boxShadow: '-12px 0 35px rgba(0,0,0,0.18)',
+            transition: 'transform 0.25s ease', overflowY: 'auto',
             transform: carritoVisible ? 'translateX(0)' : 'translateX(100%)'
         },
-        drawerOverlay: {
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.38)',
-            zIndex: 1035
-        },
+        drawerOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.38)', zIndex: 1035 },
         mainContainer: { borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' },
         headerSection: { background: 'linear-gradient(135deg, #c2185b 0%, #ad1457 100%)', padding: '24px', margin: '0', border: 'none' },
         footer: { background: 'linear-gradient(135deg, #c2185b 0%, #ad1457 100%)', color: '#ffffff', padding: '18px 24px', marginTop: '20px', textAlign: 'center' },
@@ -201,11 +226,7 @@ const ClienteDashboard = () => {
                         <p className="text-white-50 m-0 mt-1 small fs-6">Bienvenida a la experiencia inteligente de compra, {usuarioActivo.toUpperCase()}</p>
                     </Col>
                     <Col className="p-0 text-center text-md-end mt-3 mt-md-0" style={{ minWidth: '160px' }}>
-                        <Button
-                            variant="light"
-                            onClick={handleLogout}
-                            style={{ borderRadius: '20px', padding: '8px 20px', paddingTop: '6px', fontSize: '1.05rem', fontWeight: 'bold', color: '#ad1457' }}
-                        >
+                        <Button variant="light" onClick={handleLogout} style={{ borderRadius: '20px', padding: '8px 20px', paddingTop: '6px', fontSize: '1.05rem', fontWeight: 'bold', color: '#ad1457' }}>
                             Cerrar Sesión
                         </Button>
                     </Col>
@@ -214,10 +235,10 @@ const ClienteDashboard = () => {
 
             {/* BARRA DE ACCIONES PRINCIPALES */}
             <nav className="dashboard-menu" style={{ maxWidth: '100%', margin: 0 }}>
-                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'catalogo' ? 'active' : ''}`} onClick={() => { setVistaActiva('catalogo'); sincronizarCliente(); }}>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'catalogo' ? 'active' : ''}`} onClick={() => { setProductos([]); setVistaActiva('catalogo'); sincronizarCliente(true, 1); }}>
                     🛍️ Explorar Catálogo Completo
                 </button>
-                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'probador' ? 'active' : ''}`} onClick={() => { setVistaActiva('probador'); sincronizarCliente(); }}>
+                <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'probador' ? 'active' : ''}`} onClick={() => { setVistaActiva('probador'); }}>
                     🛎️ Llamar a un Asesor de Piso
                 </button>
                 <button type="button" className={`dashboard-menu-button flex-shrink-0 ${vistaActiva === 'outfit' ? 'active' : ''}`} onClick={() => setVistaActiva('outfit')}>
@@ -239,20 +260,45 @@ const ClienteDashboard = () => {
                     </Row>
                 )}
 
-                {/* VISTA 1: CATÁLOGO EN 3 COLUMNAS COMPRESAS + BOLSA DE DESEOS EN LADO DERECHO (TAMAÑO MEDIO-GRANDE) */}
+                {/* VISTA 1: CATÁLOGO CON BÚSQUEDA Y SCROLLING INCORPORADO */}
                 {vistaActiva === 'catalogo' && (
                     <Row className="g-3">
                         <Col xs={12}>
-                            <h4 className="fw-bold mb-4" style={{ color: '#e91e63' }}>👗 Colección en Existencia de la Tienda</h4>
+                            
+                            {/* 🔍 BLOQUE DE ENCABEZADO Y INPUT DE BÚSQUEDA DE ALTA DEFIDELIDAD */}
+                            <Row className="align-items-center mb-4">
+                                <Col xs={12} lg={6}>
+                                    <h4 className="fw-bold m-0" style={{ color: '#e91e63' }}>
+                                        👗 Colección en Existencia de la Tienda ({productos.length} prendas visibles)
+                                    </h4>
+                                </Col>
+                                <Col xs={12} lg={6} className="mt-3 mt-lg-0">
+                                    <InputGroup className="shadow-sm">
+                                        <InputGroup.Text className="bg-white border-end-0 text-muted fs-5">🔍</InputGroup.Text>
+                                        <Form.Control
+                                            type="text"
+                                            placeholder="Buscar por prenda, categoría o tag (ej: lino, casual)..."
+                                            className="border-start-0 py-2 fs-5"
+                                            value={terminoBusqueda}
+                                            onChange={e => setTerminoBusqueda(e.target.value)}
+                                        />
+                                        {terminoBusqueda && (
+                                            <Button variant="outline-secondary" className="bg-white border-start-0 text-muted" onClick={() => setTerminoBusqueda('')}>✕</Button>
+                                        )}
+                                    </InputGroup>
+                                </Col>
+                            </Row>
+
                             <Row className="g-3">
-                                {productos.map((p, i) => {
+                                {Array.isArray(productos) && productos.map((p, i) => {
                                     const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23fce4ec'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='%23e91e63' text-anchor='middle'>SmartBoutique</text></svg>";
+                                    const tagsArray = p.tags && Array.isArray(p.tags) ? p.tags : [];
                                     let imagenSrc = p.imagen_url && p.imagen_url.trim() !== '' && !p.imagen_url.includes('[object Object]')
                                         ? (p.imagen_url.startsWith('data:image') || p.imagen_url.includes('http') ? p.imagen_url : `data:image/jpeg;base64,${p.imagen_url}`)
                                         : fallbackImg;
 
                                     return (
-                                        <Col md={6} lg={2} key={i} className="d-flex">
+                                        <Col xs={12} sm={6} md={4} lg={3} xl={2} key={i} className="d-flex">
                                             <Card style={styles.cardBoutique} className="shadow-sm border-0 w-100 d-flex flex-column rounded-4 bg-white overflow-hidden">
                                                 <div className="d-flex justify-content-center align-items-center p-2 bg-light" style={{ height: '170px', overflow: 'hidden' }}>
                                                     <Card.Img variant="top" src={imagenSrc} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} onError={(e) => { e.target.src = fallbackImg; }} />
@@ -270,13 +316,18 @@ const ClienteDashboard = () => {
                                                         </div>
                                                     </div>
                                                     <div className="mt-auto">
-                                                        <div className="d-flex justify-content-between align-items-center mb-1">
+                                                        <div className="d-flex justify-content-between align-items-center mb-2">
+                                                            <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '50%' }}>
+                                                                {tagsArray.slice(0, 1).map((t, idx) => (
+                                                                    <Badge key={idx} bg="light" text="secondary" className="border p-1" style={{ fontSize: '0.7rem' }}>#{t}</Badge>
+                                                                ))}
+                                                            </div>
                                                             <h5 className="fw-bold text-danger m-0 font-monospace">${parseFloat(p.precio || 0).toFixed(2)}</h5>
                                                         </div>
                                                         <Button 
                                                             size="sm" 
-                                                            style={{ backgroundColor: '#e91e63', borderColor: '#e91e63' }} 
-                                                            className="w-100 fw-bold py-1 text-white shadow-sm mt-1"
+                                                            style={{ backgroundColor: '#e91e63', borderColor: '#e91e63', borderRadius: '8px' }} 
+                                                            className="w-100 fw-bold py-2 text-white shadow-sm"
                                                             onClick={() => handleAgregarAlCarrito(p)}
                                                         >
                                                             🛍️ Añadir a Bolsa
@@ -288,11 +339,27 @@ const ClienteDashboard = () => {
                                     );
                                 })}
                             </Row>
+
+                            {/* 👇 BOTÓN DE INFRAESTRUCTURA DE SCROLLING INTERACTIVO */}
+                            {paginaActual < totalPaginas && (
+                                <div className="text-center mt-5">
+                                    <Button 
+                                        size="lg" 
+                                        variant="outline-secondary" 
+                                        className="px-5 py-3 fw-bold shadow-sm" 
+                                        style={{ borderRadius: '30px', color: '#e91e63', borderColor: '#e91e63' }}
+                                        onClick={handleCargarMasProductos}
+                                        disabled={cargandoMas}
+                                    >
+                                        {cargandoMas ? '⏳ Escaneando almacén...' : '👇 Cargar más prendas'}
+                                    </Button>
+                                </div>
+                            )}
                         </Col>
                     </Row>
                 )}
 
-                {/* VISTA 2: BOTÓN DE ASISTENCIA INTERACTIVA EN PROBADORES (COORDINACIÓN DIRECTA) */}
+                {/* VISTA 2: ASISTENCIA EN PROBADORES */}
                 {vistaActiva === 'probador' && (
                     <Row className="g-4 justify-content-center">
                         <Col md={5}>
@@ -301,7 +368,7 @@ const ClienteDashboard = () => {
                                     <h4 className="fw-bold mb-3">🛎️ Solicitar Asistencia al Probador</h4>
                                     <Form onSubmit={handleSolicitarAsistencia}>
                                         <Form.Group className="mb-3">
-                                            <Form.Label className="fw-bold text-white-50">Selecciona tu Cabina / Probador:</Form.Label>
+                                            <Form.Label className="fw-bold text-white-50">Cabina / Probador:</Form.Label>
                                             <Form.Select value={probadorSeleccionado} onChange={e => setProbadorSeleccionado(e.target.value)} className="form-select-lg fw-bold text-danger">
                                                 <option value="Probador 1">Probador 1 👗</option>
                                                 <option value="Probador 2">Probador 2 👠</option>
@@ -309,11 +376,11 @@ const ClienteDashboard = () => {
                                             </Form.Select>
                                         </Form.Group>
                                         <Form.Group className="mb-4">
-                                            <Form.Label className="fw-bold text-white-50">¿Qué talla, color o prenda te llevamos?</Form.Label>
+                                            <Form.Label className="fw-bold text-white-50">¿Qué prenda o talla necesitas?</Form.Label>
                                             <Form.Control as="textarea" rows={3} placeholder="..." value={notaAsistencia} onChange={e => setNotaAsistencia(e.target.value)} className="form-control-lg text-dark" />
                                         </Form.Group>
                                         <Button type="submit" variant="light" className="w-100 btn-lg fw-bold text-danger py-2 shadow">
-                                            🔔 Enviar Alerta Urgente a Asesor
+                                            🔔 Enviar Alerta Urgente
                                         </Button>
                                     </Form>
                                 </Card.Body>
@@ -329,42 +396,32 @@ const ClienteDashboard = () => {
                                     </thead>
                                     <tbody>
                                         {asistencias.length === 0 ? (
-                                            <tr>
-                                                <td colSpan="3" className="text-muted py-3">No has realizado llamadas de asistencia en este turno de probadores.</td>
-                                            </tr>
+                                            <tr><td colSpan="3" className="text-muted py-3">No has realizado llamadas de asistencia en este turno.</td></tr>
                                         ) : (
-                                            /* 🔔 Cambiado de asistencias.filter(...).map a asistencias.map directo */
                                             asistencias.map((as, idx) => (
                                                 <tr key={idx}>
                                                     <td className="fw-bold text-danger">{as.probador_id}</td>
                                                     <td className="text-start text-muted">{as.nota || 'Solicitó un asesor de piso.'}</td>
                                                     <td>
-                                                        {as.estado === 'pendiente' && (
-                                                            <Badge bg="danger" className="fs-6 px-2 py-1">PENDIENTE 🔔</Badge>
-                                                        )}
-                                                        {as.estado === 'recibido' && (
-                                                            <Badge bg="warning" text="dark" className="fs-6 px-2 py-1">EN CAMINO 🏃‍♂️💨</Badge>
-                                                        )}
-                                                        {as.estado === 'atendido' && (
-                                                            <Badge bg="success" className="fs-6 px-2 py-1">ASISTENCIA FINALIZADA ✓</Badge>
-                                                        )}
+                                                        {as.estado === 'pendiente' && <Badge bg="danger" className="fs-6 px-2 py-1">PENDIENTE 🔔</Badge>}
+                                                        {as.estado === 'recibido' && <Badge bg="warning" text="dark" className="fs-6 px-2 py-1">EN CAMINO 🏃‍♂️💨</Badge>}
+                                                        {as.estado === 'atendido' && <Badge bg="success" className="fs-6 px-2 py-1">FINALIZADA ✓</Badge>}
                                                     </td>
                                                 </tr>
                                             ))
                                         )}
                                     </tbody>
-                                    
                                 </Table>
                             </div>
                         </Col>
                     </Row>
                 )}
 
-                {/* VISTA 3: RECOMENDADOR INTELIGENTE DE OUTFITS DE ACUERDO A UNA IMAGEN */}
+                {/* VISTA 3: RECOMENDADOR INTELIGENTE DE OUTFITS */}
                 {vistaActiva === 'outfit' && (
                     <div className="mx-auto" style={{ maxWidth: '850px' }}>
                         <h4 className="fw-bold mb-3" style={{ color: '#e91e63' }}>✨ Recomendador de Outfits Premium Inteligente</h4>
-                        <p className="text-muted mb-4">¿Tienes una prenda y no sabes con qué combinarla? Sube su fotografía aquí y nuestro algoritmo escaneará las colecciones en existencia de la boutique para armarte el match perfecto.</p>
+                        <p className="text-muted mb-4">Sube su fotografía aquí y nuestro algoritmo escaneará las colecciones en existencia de la boutique para armarte el match perfecto.</p>
                         
                         <Card className="border-0 shadow-sm p-4 bg-light mb-4" style={{ borderRadius: '14px' }}>
                             <Form.Group className="mb-3 text-center">
@@ -412,12 +469,13 @@ const ClienteDashboard = () => {
                 )}
             </div>
 
+            {/* BAG / DRAWER FIN DE COMPRA */}
             {carritoVisible && <div style={styles.drawerOverlay} onClick={cerrarCarrito} />}
             <div style={styles.drawer} className="d-flex flex-column">
                 <div className="d-flex justify-content-between align-items-start p-3 border-bottom">
                     <div>
                         <h5 className="fw-bold mb-1">🛍️ Bolsa de Deseos</h5>
-                        <small className="text-muted">Revisa tus prendas guardadas y confirma tu ticket.</small>
+                        <small className="text-muted">Revisa tus prendas guardadas.</small>
                     </div>
                     <Button variant="link" className="text-danger fw-bold p-0 fs-3" onClick={cerrarCarrito}>×</Button>
                 </div>
@@ -426,7 +484,6 @@ const ClienteDashboard = () => {
                         <div className="text-center text-muted py-5">
                             <div className="fs-4">✨</div>
                             <p className="mb-2">Tu bolsa está vacía.</p>
-                            <p className="small">Añade prendas para ver tu carrito aquí.</p>
                         </div>
                     ) : (
                         <>
@@ -449,17 +506,18 @@ const ClienteDashboard = () => {
                                 <span className="fw-bold text-secondary">Total estimado</span>
                                 <span className="fw-bold text-danger font-monospace fs-5">${calcularTotalBolsa()}</span>
                             </div>
-                            <Button className="w-100 fw-bold py-3 text-white shadow" style={{ backgroundColor: '#e91e63', border: 'none', fontSize: '1.05rem' }} onClick={() => { Swal.fire('Listo', 'Muestra este resumen al cajero para procesar tu ticket al salir del probador.', 'success'); cerrarCarrito(); }}>
+                            <Button className="w-100 fw-bold py-3 text-white shadow" style={{ backgroundColor: '#e91e63', border: 'none', fontSize: '1.05rem' }} onClick={() => { Swal.fire('Listo', 'Muestra este resumen al cajero para procesar tu ticket.', 'success'); cerrarCarrito(); }}>
                                 ✓ Confirmar Lista de Compra
                             </Button>
                         </>
                     )}
                 </div>
             </div>
+
             <footer className="dashboard-footer">
                 <div className="dashboard-footer-title">© 2026 SmartBoutique</div>
                 <div className="dashboard-footer-subtitle">Experiencia de compra premium • Moda inteligente</div>
-                <div className="dashboard-footer-legal">Infraestructura Global Conectada a AWS RDS Postgres v15 • Sistema en Línea Activo</div>
+                <div className="dashboard-footer-legal">Conectado a AWS RDS Postgres v15 • Infraestructura Cloud Sincronizada</div>
             </footer>
         </div>
     );

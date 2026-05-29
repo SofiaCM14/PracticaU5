@@ -18,8 +18,7 @@ function decodeJwtPayload(token) {
     }
 }
 
-// ====== MODIFICA LA FUNCIÓN AL INICIO DE productosRutas.js ======
-
+// ====== FUNCIÓN DE VERIFICACIÓN DE TOKEN ======
 async function verificarToken(req, res, next) {
     try {
         console.log('verificarToken - headers:', req.headers);
@@ -70,28 +69,75 @@ const getUsuarioId = async (usuario) => {
 };
 
 // ==========================================
-// 1. TABLA: auditoria (HISTORIAL COMPARTIDO)
+// 1. TABLA: auditoria (SOPORTE PAGINACIÓN Y BÚSQUEDAS)
 // ==========================================
 router.get('/auditoria', async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT a.*, u.username as usuario, u.rol 
-            FROM auditoria a 
-            LEFT JOIN usuarios u ON a.usuario_id = u.id 
-            ORDER BY a.fecha DESC LIMIT 15;
-        `);        
-        res.json(result.rows);
+        const pagina = parseInt(req.query.page) || 1;
+        const limite = parseInt(req.query.limit) || 15;
+        const buscar = req.query.search ? req.query.search.trim() : '';
+        const calcularOffset = (pagina - 1) * limite;
+
+        let queryAuditoria = '';
+        let queryCount = '';
+        let queryParams = [];
+
+        if (buscar !== '') {
+            queryAuditoria = `
+                SELECT a.*, u.username as usuario, u.rol 
+                FROM auditoria a 
+                LEFT JOIN usuarios u ON a.usuario_id = u.id 
+                WHERE a.accion_realizada ILIKE $1 
+                   OR a.detalle_accion ILIKE $1 
+                   OR u.username ILIKE $1
+                ORDER BY a.fecha DESC 
+                LIMIT $2 OFFSET $3;
+            `;
+            queryCount = `
+                SELECT COUNT(*) FROM auditoria a
+                LEFT JOIN usuarios u ON a.usuario_id = u.id
+                WHERE a.accion_realizada ILIKE $1 
+                   OR a.detalle_accion ILIKE $1 
+                   OR u.username ILIKE $1;
+            `;
+            queryParams = [`%${buscar}%`];
+        } else {
+            queryAuditoria = `
+                SELECT a.*, u.username as usuario, u.rol 
+                FROM auditoria a 
+                LEFT JOIN usuarios u ON a.usuario_id = u.id 
+                ORDER BY a.fecha DESC 
+                LIMIT $1 OFFSET $2;
+            `;
+            queryCount = `SELECT COUNT(*) FROM auditoria;`;
+        }
+
+        const [resAudit, resCount] = await Promise.all([
+            pool.query(queryAuditoria, buscar !== '' ? [...queryParams, limite, calcularOffset] : [limite, calcularOffset]),
+            pool.query(queryCount, buscar !== '' ? queryParams : [])
+        ]);
+
+        const totalRegistros = parseInt(resCount.rows[0].count);
+        const totalPaginas = Math.ceil(totalRegistros / limite);
+
+        res.status(200).json({
+            records: resAudit.rows,
+            meta: {
+                totalRecords: totalRegistros,
+                totalPages: totalPaginas,
+                currentPage: pagina,
+                limit: limite
+            }
+        });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Error al consultar auditoria' });
+        console.error('Error al consultar auditoria:', error);
+        res.status(500).json({ error: 'Error al consultar la bitácora de auditoría.' });
     }
 });
 
 // ==========================================
 // 2. TABLA: usuarios (GESTIÓN DEL STAFF - CRUD)
 // ==========================================
-
-// 🔒 CONSULTAR USUARIOS (Solo Gerente)
 router.get('/usuarios', verificarToken, esGerente, async (req, res) => {
     try {
         const result = await pool.query('SELECT id, username, rol, password FROM usuarios ORDER BY id ASC;');
@@ -102,7 +148,6 @@ router.get('/usuarios', verificarToken, esGerente, async (req, res) => {
     }
 });
 
-// 🔒 AGREGAR NUEVO USUARIO (Solo Gerente)
 router.post('/usuarios', verificarToken, esGerente, async (req, res) => {
     const { username, rol } = req.body;
     try {
@@ -117,20 +162,16 @@ router.post('/usuarios', verificarToken, esGerente, async (req, res) => {
     }
 });
 
-// 🔒 ACTUALIZAR USUARIO EXISTENTE (Solo Gerente)
 router.put('/usuarios/:id', verificarToken, async (req, res) => {
     const { id } = req.params;
     const { username, rol, password } = req.body;
-
     try {
         if (password) {
-            // Si el admin cambió la contraseña
             await pool.query(
                 'UPDATE usuarios SET username = $1, rol = $2, password = $3 WHERE id = $4',
                 [username, rol, password, id]
             );
         } else {
-            // Si el admin no tocó la contraseña, se queda intacta la actual
             await pool.query(
                 'UPDATE usuarios SET username = $1, rol = $2 WHERE id = $3',
                 [username, rol, id]
@@ -143,7 +184,6 @@ router.put('/usuarios/:id', verificarToken, async (req, res) => {
     }
 });
 
-// 🔒 ELIMINAR USUARIO DE LA BASE DE DATOS (Solo Gerente)
 router.delete('/usuarios/:id', verificarToken, esGerente, async (req, res) => {
     const { id } = req.params;
     try {
@@ -155,9 +195,11 @@ router.delete('/usuarios/:id', verificarToken, esGerente, async (req, res) => {
     }
 });
 
+// ==========================================
+// 3. TABLA: productos (CATÁLOGO PRINCIPAL)
+// ==========================================
 router.get('/', async (req, res) => {
     try {
-        // Extraer parámetros con valores por defecto
         const pagina = parseInt(req.query.page) || 1;
         const limite = parseInt(req.query.limit) || 12;
         const buscar = req.query.search ? req.query.search.trim() : '';
@@ -168,7 +210,6 @@ router.get('/', async (req, res) => {
         let queryParams = [];
 
         if (buscar !== '') {
-            // Filtro dinámico por coincidencia parcial en nombre, categoría o etiquetas
             queryProductos = `
                 SELECT * FROM productos 
                 WHERE nombre ILIKE $1 OR categoria ILIKE $1 OR $1 = ANY(tags)
@@ -189,7 +230,6 @@ router.get('/', async (req, res) => {
             queryCount = `SELECT COUNT(*) FROM productos;`;
         }
 
-        // Ejecución paralela en AWS RDS para optimizar tiempos de respuesta
         const [resProductos, resCount] = await Promise.all([
             pool.query(queryProductos, buscar !== '' ? [...queryParams, limite, calcularOffset] : [limite, calcularOffset]),
             pool.query(queryCount, buscar !== '' ? queryParams : [])
@@ -207,7 +247,6 @@ router.get('/', async (req, res) => {
                 limit: limite
             }
         });
-
     } catch (error) {
         console.error('❌ ERROR REAL EN POSTGRESQL (RDS):', error);
         res.status(500).json({ error: 'Error al traer productos paginados.' });
@@ -215,11 +254,8 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-    // 1. Extraemos los datos del body (incluyendo el usuario operador que manda el front)
     const { nombre, precio, stock, talla, color, categoria, descripcion, imagen_url, tags, usuario } = req.body;
-
     try {
-        // --- PASO A: Insertar el producto en la tabla productos ---
         const queryProducto = `
             INSERT INTO productos (nombre, precio, stock, talla, color, categoria, descripcion, imagen_url, tags)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id;
@@ -227,33 +263,23 @@ router.post('/', async (req, res) => {
         const resultProducto = await pool.query(queryProducto, [nombre, precio, stock, talla, color, categoria, descripcion, imagen_url, tags]);
         const nuevoProductoId = resultProducto.rows[0].id;
 
-        // --- PASO B: OBTENER EL ID DEL USUARIO PARA LA AUDITORÍA ---
-        // Como el front manda el username ('admin_sofi'), buscamos su id numérico en la BD
         const resultUser = await pool.query('SELECT id FROM usuarios WHERE username = $1', [usuario || 'admin_sofi']);
         const usuarioId = resultUser.rows[0]?.id || null; 
 
-        // --- PASO C: INSERTAR EN LA TABLA AUDITORIA ---
         const queryAuditoria = `
             INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha)
             VALUES ($1, $2, $3, NOW());
         `;
         const detalle = `Se insertó una nueva prenda: "${nombre}" (Talla: ${talla}, Stock Inicial: ${stock} pz) con ID #${nuevoProductoId}.`;
         
-        await pool.query(queryAuditoria, [
-            usuarioId, 
-            'CREAR_PRODUCTO', 
-            detalle
-        ]);
-
-        // 2. Respondemos al frontend que todo fue un éxito
+        await pool.query(queryAuditoria, [usuarioId, 'CREAR_PRODUCTO', detalle]);
         res.status(201).json({ message: 'Producto guardado y auditado con éxito.' });
-
     } catch (error) {
         console.error('Error al guardar mercancía con auditoría:', error);
         res.status(500).json({ error: 'Error interno al procesar la solicitud.' });
     }
 });
-// 🛠️ PUT MODIFICADO: Sincroniza las columnas imagen_url (Base64) y tags con el Modal
+
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre, precio, stock, talla, color, categoria, descripcion, imagen_url, tags } = req.body;
@@ -270,9 +296,12 @@ router.put('/:id', async (req, res) => {
         res.status(500).json({ error: 'Error al actualizar el producto' });
     }
 });
+
+// ==========================================
+// 4. TABLA: ventas & FINANZAS DE CAJA
+// ==========================================
 router.get('/ventas', verificarToken, async (req, res) => {
     try {
-        // 1. Buscamos la última caja que se encuentre 'abierta'
         const queryCaja = `
             SELECT fecha_apertura 
             FROM movimientos_caja 
@@ -281,486 +310,32 @@ router.get('/ventas', verificarToken, async (req, res) => {
         `;
         const resCaja = await pool.query(queryCaja);
 
-        // 2. Si no hay ninguna caja abierta (Corte hecho), limpiamos el historial mandando un arreglo vacío
         if (resCaja.rows.length === 0) {
             return res.status(200).json([]);
         }
 
         const fechaApertura = resCaja.rows[0].fecha_apertura;
 
-        // 3. Traemos SOLO las ventas que se hicieron desde que se abrió esta caja
-        // Usamos las columnas nativas para que tu Frontend las mapée sin problemas
         const queryVentas = `
-            SELECT 
-                v.id, 
-                v.usuario_id, 
-                v.total, 
-                v.fecha_venta, 
-                v.descuento_aplicado,
-                u.username,
-                u.rol
+            SELECT v.id, v.usuario_id, v.total, v.fecha_venta, v.descuento_aplicado, u.username, u.rol
             FROM ventas v
             INNER JOIN usuarios u ON v.usuario_id = u.id
             WHERE v.fecha_venta >= $1
             ORDER BY v.id DESC;
         `;
         const resVentas = await pool.query(queryVentas, [fechaApertura]);
-        
         res.status(200).json(resVentas.rows);
-
     } catch (error) {
-        console.error("Error al filtrar las ventas del turno activo:", error);
+        console.error("Error al obtener las ventas del turno:", error);
         res.status(500).json({ error: "No se pudieron obtener las ventas del turno." });
     }
 });
-// 📄 ENDPOINT 2: DESGLOSE DE PRENDAS DE UN CORTE ESPECÍFICO (GET)
-router.get('/movimientos-caja/detalles-ticket/:id', verificarToken, async (req, res) => {
-    const { id } = req.params;
 
-    try {
-        // 1. Obtener los datos y horas exactas de esa caja en específico
-        const queryCaja = `SELECT fecha_apertura, fecha_cierre FROM movimientos_caja WHERE id = $1;`;
-        const resCaja = await pool.query(queryCaja, [id]);
-
-        if (resCaja.rows.length === 0) {
-            return res.status(404).json({ error: "Corte de caja no encontrado." });
-        }
-
-        const { fecha_apertura, fecha_cierre } = resCaja.rows[0];
-        const limiteCierre = fecha_cierre ? fecha_cierre : new Date();
-
-        // 2. Capturar absolutamente todas las ventas de prendas en ese rango exacto
-        const queryArticulos = `
-            SELECT p.nombre AS prenda, dv.cantidad, dv.precio_unitario, (dv.cantidad * dv.precio_unitario) AS subtotal
-            FROM detalle_ventas dv
-            JOIN ventas v ON dv.venta_id = v.id
-            JOIN productos p ON dv.producto_id = p.id
-            WHERE v.fecha_venta >= $1 AND v.fecha_venta <= $2
-            ORDER BY v.id ASC;
-        `;
-        
-        const resArticulos = await pool.query(queryArticulos, [fecha_apertura, limiteCierre]);
-        res.status(200).json(resArticulos.rows);
-
-    } catch (error) {
-        console.error("Error al obtener desglose del corte:", error);
-        res.status(500).json({ error: "No se pudo procesar el desglose del ticket." });
-    }
-});
-router.get('/devoluciones', verificarToken, async (req, res) => {
-    try {
-        const query = `
-            SELECT d.id, d.venta_id, d.producto_detalle, d.cantidad, 
-                   d.motivo_devolucion, d.monto_reembolsado, d.tipo_reembolso, 
-                   d.fecha_devolucion, u.username as operador_name
-            FROM devoluciones d
-            INNER JOIN usuarios u ON d.usuario_id = u.id
-            ORDER BY d.fecha_devolucion DESC;
-        `;
-        const result = await pool.query(query);
-        res.json(result.rows);
-    } catch (error) {
-        console.error('Error al obtener devoluciones:', error);
-        res.status(500).json({ error: 'No se pudo cargar el historial de devoluciones.' });
-    }
-});
-
-router.post('/devoluciones', verificarToken, async (req, res) => {
-    const { 
-        venta_id, 
-        producto_detalle, 
-        cantidad, 
-        motivo_devolucion, 
-        monto_reembolsado, 
-        tipo_reembolso 
-    } = req.body;
-    
-    // Tomamos el usuario del token o por defecto el id 1 (admin_sofi)
-    const idOperador = req.usuario_id || 1; 
-
-    try {
-        // Iniciamos un bloque transaccional seguro
-        await pool.query('BEGIN');
-
-        // 1. Inyectamos la devolución en tu tabla (Mapeada idéntica a tus capturas)
-        const queryInsertDev = `
-            INSERT INTO devoluciones (
-                venta_id, producto_detalle, cantidad, motivo_devolucion, 
-                monto_reembolsado, tipo_reembolso, usuario_id, fecha_devolucion
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
-            RETURNING id;
-        `;
-        const resDev = await pool.query(queryInsertDev, [
-            parseInt(venta_id),
-            producto_detalle,
-            parseInt(cantidad),
-            motivo_devolucion,
-            parseFloat(monto_reembolsado),
-            tipo_reembolso,
-            idOperador
-        ]);
-        const devId = resDev.rows[0].id;
-
-        // 2. 🎯 ESTRATEGIA DE STOCK: Buscamos el ID físico de la prenda usando el nombre exacto
-        const queryBuscarProd = `
-            SELECT id FROM productos 
-            WHERE UPPER(nombre) = UPPER($1) 
-            LIMIT 1;
-        `;
-        const resProd = await pool.query(queryBuscarProd, [producto_detalle.trim()]);
-
-        if (resProd.rows.length > 0) {
-            const productoIdReal = resProd.rows[0].id;
-            
-            // Reintegramos las piezas sumándolas al stock actual en AWS RDS
-            const queryUpdateStock = `
-                UPDATE productos 
-                SET stock = stock + $1 
-                WHERE id = $2;
-            `;
-            await pool.query(queryUpdateStock, [parseInt(cantidad), productoIdReal]);
-        } else {
-            console.log(`⚠️ Advertencia: No se encontró la prenda "${producto_detalle}" en el catálogo. Se guardó el reporte financiero, pero no se alteró el stock.`);
-        }
-
-        // 3. Dejamos evidencia transparente en tu bitácora de Auditoría global
-        const queryAuditoria = `
-            INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) 
-            VALUES ($1, $2, $3, NOW());
-        `;
-        const detalleAccion = `DEVOLUCIÓN #DEV-${devId} (Venta #V-${venta_id}). Reintegrado: ${cantidad} pz de "${producto_detalle.toUpperCase()}". Reembolso: $${parseFloat(monto_reembolsado).toFixed(2)} [${tipo_reembolso}].`;
-        await pool.query(queryAuditoria, [idOperador, 'REGISTRO_DEVOLUCION', detalleAccion]);
-
-        // Guardamos de forma definitiva en la base de datos cloud
-        await pool.query('COMMIT');
-        
-        res.status(201).json({ 
-            ok: true, 
-            message: "Devolución registrada exitosamente y stock sincronizado.", 
-            devolucion_id: devId 
-        });
-
-    } catch (error) {
-        await pool.query('ROLLBACK');
-        console.error("Error crítico procesando la devolución:", error);
-        res.status(500).json({ error: "No se pudo completar el procesamiento de la devolución." });
-    }
-});
-router.post('/caja', async (req, res) => {
-    const { tipo, monto, usuario, rol } = req.body; 
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
-        await client.query('INSERT INTO movimientos_caja (tipo, monto, fecha) VALUES ($1, $2, NOW());', [tipo, monto]);
-        const usuarioId = await getUsuarioId(usuario);
-        await client.query('INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) VALUES ($1, $2, $3, NOW());', [usuarioId, 'Corte Caja', `${tipo} de caja por $${monto}`]);
-        await client.query('COMMIT');
-        res.status(201).json({ message: 'Movimiento de caja guardado' });
-    } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('ERROR CAJA:', error);
-        res.status(500).json({ error: 'Error en movimiento de caja', details: error.message });
-    } finally {
-        client.release();
-    }
-});
-// 🔴 NUEVO: Endpoint para realizar el Cierre de Caja Automatizado
-router.post('/movimientos-caja/cerrar-caja', verificarToken, async (req, res) => {
-    const { usuario_id } = req.body;
-    const idOperador = usuario_id ? parseInt(usuario_id) : 1;
-
-    try {
-        await pool.query('BEGIN');
-
-        const queryBuscarAbierta = `
-            SELECT id, fecha_apertura, monto_inicial 
-            FROM movimientos_caja 
-            WHERE usuario_id = $1 AND estado = 'abierta'
-            ORDER BY id DESC LIMIT 1;
-        `;
-        const resCaja = await pool.query(queryBuscarAbierta, [idOperador]);
-
-        if (resCaja.rows.length === 0) {
-            await pool.query('ROLLBACK');
-            return res.status(400).json({ error: "No se encontró ninguna caja abierta." });
-        }
-
-        const cajaActiva = resCaja.rows[0];
-        const cajaId = cajaActiva.id;
-        const fechaApertura = cajaActiva.fecha_apertura;
-        const montoInicial = parseFloat(cajaActiva.monto_inicial);
-
-        // Sumamos absolutamente todas las ventas desde la apertura
-        const querySumarVentas = `
-            SELECT COALESCE(SUM(total), 0) AS total_ventas 
-            FROM ventas 
-            WHERE usuario_id = $1 AND fecha_venta >= $2;
-        `;
-        const resVentas = await pool.query(querySumarVentas, [idOperador, fechaApertura]);
-        const totalVentasTurno = parseFloat(resVentas.rows[0].total_ventas);
-
-        const montoFinalCalculado = montoInicial + totalVentasTurno;
-
-        // Actualizamos el estado a 'cerrada'
-        const queryActualizarCaja = `
-            UPDATE movimientos_caja 
-            SET monto_final = $1, fecha_cierre = NOW(), estado = 'cerrada' 
-            WHERE id = $2;
-        `;
-        await pool.query(queryActualizarCaja, [montoFinalCalculado, cajaId]);
-
-        const queryAuditoria = `
-            INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) 
-            VALUES ($1, $2, $3, NOW());
-        `;
-        const detalleCierre = `CIERRE DE CAJA (Corte #C-${cajaId}). Fondo Inicial: $${montoInicial.toFixed(2)}. Ventas: $${totalVentasTurno.toFixed(2)}. Total: $${montoFinalCalculado.toFixed(2)}.`;
-        await pool.query(queryAuditoria, [idOperador, 'CIERRE_CAJA', detalleCierre]);
-
-        await pool.query('COMMIT');
-        
-        res.status(200).json({ 
-            ok: true, 
-            message: "Caja cerrada correctamente", 
-            caja_id: cajaId,
-            ventas_del_dia: totalVentasTurno,
-            monto_final: montoFinalCalculado
-        });
-
-    } catch (error) {
-        await pool.query('ROLLBACK');
-        console.error("Error en el arqueo de caja:", error);
-        res.status(500).json({ error: "No se pudo procesar el cierre." });
-    }
-});
-
-router.post('/movimientos-caja/abrir-caja', verificarToken, async (req, res) => {
-    const { usuario_id, monto_inicial } = req.body;
-    const idOperador = usuario_id ? parseInt(usuario_id) : 1;
-    const fondo = monto_inicial ? parseFloat(monto_inicial) : 0.00;
-
-    try {
-        await pool.query('BEGIN');
-
-        // 1. Validar que no exista ya una caja ABIERTA para evitar duplicados
-        const queryVerificar = `SELECT id FROM movimientos_caja WHERE estado = 'abierta';`;
-        const resVerificar = await pool.query(queryVerificar);
-
-        if (resVerificar.rows.length > 0) {
-            await pool.query('ROLLBACK');
-            return res.status(400).json({ error: "Ya existe una caja abierta en el sistema." });
-        }
-
-        // 2. Insertar el nuevo registro de apertura
-        const queryAbrir = `
-            INSERT INTO movimientos_caja (usuario_id, monto_inicial, fecha_apertura, estado)
-            VALUES ($1, $2, NOW(), 'abierta') RETURNING id;
-        `;
-        const resAbrir = await pool.query(queryAbrir, [idOperador, fondo]);
-        const nuevaCajaId = resAbrir.rows[0].id;
-
-        // 3. Registrar la apertura en la bitácora de Auditoría
-        const queryAuditoria = `
-            INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) 
-            VALUES ($1, $2, $3, NOW());
-        `;
-        const detalleAuditoria = `APERTURA DE CAJA EXITOSA (Corte #C-${nuevaCajaId}). Fondo Inicial inyectado: $${fondo.toFixed(2)}.`;
-        await pool.query(queryAuditoria, [idOperador, 'APERTURA_CAJA', detalleAuditoria]);
-
-        await pool.query('COMMIT');
-        res.status(201).json({ ok: true, message: "Caja abierta con éxito", caja_id: nuevaCajaId });
-
-    } catch (error) {
-        await pool.query('ROLLBACK');
-        console.error("Error crítico en la apertura de caja:", error);
-        res.status(500).json({ error: "No se pudo abrir la caja en el servidor." });
-    }
-});
-
-router.get('/movimientos-caja/detalles-ticket/:id', verificarToken, async (req, res) => {
-    const { id } = req.params;
-
-    try {
-        // 1. Obtener los datos de apertura y cierre de esa caja
-        const queryCaja = `SELECT fecha_apertura, fecha_cierre FROM movimientos_caja WHERE id = $1;`;
-        const resCaja = await pool.query(queryCaja, [id]);
-
-        if (resCaja.rows.length === 0) {
-            return res.status(404).json({ error: "Corte de caja no encontrado." });
-        }
-
-        const { fecha_apertura, fecha_cierre } = resCaja.rows[0];
-        
-        // Si la caja sigue abierta, usamos la fecha y hora actual (NOW()) como límite de búsqueda
-        const limiteCierre = fecha_cierre ? fecha_cierre : new Date();
-
-        // 2. Traer el desglose detallado de todos los artículos vendidos en ese rango de tiempo
-        const queryArticulos = `
-            SELECT p.nombre AS prenda, dv.cantidad, dv.precio_unitario, (dv.cantidad * dv.precio_unitario) AS subtotal
-            FROM detalle_ventas dv
-            JOIN ventas v ON dv.venta_id = v.id
-            JOIN productos p ON dv.producto_id = p.id
-            WHERE v.fecha_venta >= $1 AND v.fecha_venta <= $2
-            ORDER BY v.id ASC;
-        `;
-        
-        const resArticulos = await pool.query(queryArticulos, [fecha_apertura, limiteCierre]);
-        res.status(200).json(resArticulos.rows);
-
-    } catch (error) {
-        console.error("Error al obtener desglose del ticket de corte:", error);
-        res.status(500).json({ error: "No se pudo procesar el desglose del ticket." });
-    }
-});
-// =================================================================
-// 🔔 ENDPOINT: SOLICITAR ASISTENCIA DESDE EL PROBADOR (POST)
-// =================================================================
-router.post('/asistencia', async (req, res) => {
-    // Ajustamos la variable a 'probador_id' para que coincida con tu base de datos
-    const { probador_id, nota } = req.body; 
-    try {
-        // Usamos los nombres reales de tus columnas: probador_id, estado y fecha_solicitud
-        const queryInsert = `
-            INSERT INTO asistencia_probadores (probador_id, estado, atendido_por, fecha_solicitud, nota) 
-            VALUES ($1, 'pendiente', NULL, NOW(), $2);
-        `;
-        await pool.query(queryInsert, [probador_id, nota]);
-        
-        res.status(201).json({ message: 'Asistencia solicitada con éxito.' });
-    } catch (error) { 
-        console.error('Error en POST /asistencia:', error);
-        res.status(500).json({ error: 'Error interno al solicitar asistencia en probadores.' }); 
-    }
-});
-
-// =================================================================
-// 📡 ENDPOINT: LEER LLAMADAS ACTIVAS PARA EL VENDEDOR (GET)
-// =================================================================
-router.get('/asistencia', async (req, res) => {
-    try {
-        // Corregimos el filtro a 'pendiente' en minúsculas y ordenamos por fecha_solicitud
-        const querySelect = `
-            SELECT id, probador_id, estado, atendido_por, fecha_solicitud, nota
-            FROM asistencia_probadores 
-            WHERE estado IN ('pendiente', 'recibido', 'atendido') 
-            ORDER BY fecha_solicitud DESC;
-        `;
-        const result = await pool.query(querySelect);
-        res.json(result.rows);
-    } catch (error) { 
-        console.error('Error en GET /asistencia:', error);
-        res.status(500).json({ error: 'No se pudo cargar el flujo de probadores.' }); 
-    }
-});
-// ✔️ NUEVO ENDPOINT: MARCAR ALERTA COMO ATENDIDA POR EL ASESOR (PUT)
-router.put('/asistencia/atender/:id', async (req, res) => {
-    const { id } = req.params;
-    const { usuario_id } = req.body; // ID del vendedor que atiende (ej: Sherlyn = 4)
-
-    try {
-        // Actualiza el estado a 'atendido' y registra el ID del empleado que fue a ayudar
-        const queryUpdate = `
-            UPDATE asistencia_probadores 
-            SET estado = 'atendido', atendido_por = $1 
-            WHERE id = $2;
-        `;
-        await pool.query(queryUpdate, [parseInt(usuario_id || 4), parseInt(id)]);
-        res.status(200).json({ ok: true, message: "Llamada marcada como atendida." });
-    } catch (error) {
-        console.error('Error en PUT /asistencia/atender:', error);
-        res.status(500).json({ error: "No se pudo actualizar el estado del probador." });
-    }
-});
-router.put('/asistencia/recibir/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        const queryUpdate = `
-            UPDATE asistencia_probadores 
-            SET estado = 'recibido' 
-            WHERE id = $1;
-        `;
-        await pool.query(queryUpdate, [parseInt(id)]);
-        res.status(200).json({ ok: true, message: "Llamada marcada como recibida por el asesor." });
-    } catch (error) {
-        console.error('Error en PUT /asistencia/recibir:', error);
-        res.status(500).json({ error: "No se pudo actualizar a estado recibido." });
-    }
-});
-router.post('/wishlist', async (req, res) => {
-    const { usuario_id, producto_id } = req.body;
-    try {
-        await pool.query('INSERT INTO carrito_deseos (usuario_id, producto_id) VALUES ($1, $2);', [usuario_id, producto_id]);
-        res.status(201).json({ message: 'Prenda añadida a tus deseos ❤️' });
-    } catch (error) { res.status(500).json({ error: 'Error al guardar en tu lista de deseos' }); }
-});
-router.post('/registrar-venta', verificarToken, async (req, res) => {
-    // 1. Desestructuramos las variables enviadas por el Frontend
-    const { total, descuento_aplicado, usuario_id, carrito, descuento_id } = req.body; 
-
-    // Blindaje por si usuario_id viene indefinido o nulo, le asignamos el ID 1 (admin_sofi)
-    const idOperador = usuario_id ? parseInt(usuario_id) : 1;
-    // Si no mandan el descuento_id en la petición, por defecto se amarra al ID 1 (Sin Descuento)
-    const idDescuento = descuento_id ? parseInt(descuento_id) : 1;
-
-    try {
-        // Iniciamos una transacción segura en PostgreSQL
-        await pool.query('BEGIN');
-
-        // 2. PASO 1: Insertar el encabezado incluyendo el descuento_id relacional
-        const queryVenta = `
-            INSERT INTO ventas (usuario_id, descuento_id, total, descuento_aplicado, fecha_venta) 
-            VALUES ($1, $2, $3, $4, NOW()) RETURNING id;
-        `;
-        const resVenta = await pool.query(queryVenta, [idOperador, idDescuento, total, descuento_aplicado]);
-        const nuevaVentaId = resVenta.rows[0].id; // Recuperamos el id automático generado
-
-        // 3. PASO 2: Recorrer el carrito e insertar cada prenda en "detalle_ventas"
-        const queryDetalle = `
-            INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario)
-            VALUES ($1, $2, $3, $4);
-        `;
-
-        for (const item of carrito) {
-            // Insertamos amarrando al ID de la venta que acabamos de crear
-            await pool.query(queryDetalle, [nuevaVentaId, item.producto_id, item.cantidad, item.precio_unitario]);
-            
-            // Extra: Restamos las piezas del stock de la tabla productos
-            await pool.query(
-                'UPDATE productos SET stock = stock - $1 WHERE id = $2',
-                [item.cantidad, item.producto_id]
-            );
-        }
-        const queryAuditoria = `
-            INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) 
-            VALUES ($1, $2, $3, NOW());
-        `;
-        
-        const desgloseDetalle = `Venta registrada de forma automatizada desde el Frontend. Folio generado: #V-${nuevaVentaId}. Total Neto Cobrado: $${parseFloat(total).toFixed(2)}. Descuento acumulado: $${parseFloat(descuento_aplicado).toFixed(2)}. Inventario actualizado correctamente.`;
-
-        await pool.query(queryAuditoria, [
-            idOperador, 
-            'REGISTRO_VENTA', 
-            desgloseDetalle
-        ]);
-        // =================================================================
-
-        // Si todo se ejecutó sin errores, guardamos los cambios permanentemente en AWS RDS
-        await pool.query('COMMIT');
-        res.status(201).json({ message: 'Venta procesada y auditada con éxito', venta_id: nuevaVentaId });
-
-    } catch (error) {
-        // Si algo truena, hacemos Rollback para dejar la base de datos intacta sin basura
-        await pool.query('ROLLBACK');
-        console.error("Error crítico en transacción de venta:", error);
-        res.status(500).json({ error: 'No se pudo registrar la venta ni sus detalles.' });
-    }
-});
-// ====== RUTA: GET http://34.219.103.28:3000/api/productos/ventas/detalles/:id ======
 router.get('/ventas/detalles/:id', verificarToken, async (req, res) => {
-    const { id } = req.params; // ID de la venta a consultar
+    const { id } = req.params;
     try {
         const query = `
-            SELECT dv.id, dv.cantidad, dv.precio_unitario, p.nombre AS nombre_prenda
+            SELECT dv.id, dv.cantidad, dv.precio_unitario, p.nombre AS nombre_prenda, dv.producto_id
             FROM detalle_ventas dv
             INNER JOIN productos p ON dv.producto_id = p.id
             WHERE dv.venta_id = $1;
@@ -772,60 +347,224 @@ router.get('/ventas/detalles/:id', verificarToken, async (req, res) => {
         res.status(500).json({ error: 'No se pudo obtener el desglose del ticket.' });
     }
 });
-// 🟢 NUEVO: Endpoint para jalar los movimientos de caja hacia el Frontend
+
+router.post('/registrar-venta', verificarToken, async (req, res) => {
+    const { total, descuento_aplicado, usuario_id, carrito, descuento_id } = req.body; 
+    const idOperador = usuario_id ? parseInt(usuario_id) : 1;
+    const idDescuento = descuento_id ? parseInt(descuento_id) : 1;
+
+    try {
+        await pool.query('BEGIN');
+
+        const queryVenta = `
+            INSERT INTO ventas (usuario_id, descuento_id, total, descuento_aplicado, fecha_venta) 
+            VALUES ($1, $2, $3, $4, NOW()) RETURNING id;
+        `;
+        const resVenta = await pool.query(queryVenta, [idOperador, idDescuento, total, descuento_aplicado]);
+        const nuevaVentaId = resVenta.rows[0].id;
+
+        const queryDetalle = `
+            INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario)
+            VALUES ($1, $2, $3, $4);
+        `;
+
+        for (const item of carrito) {
+            await pool.query(queryDetalle, [nuevaVentaId, item.producto_id, item.cantidad, item.precio_unitario]);
+            await pool.query(
+                'UPDATE productos SET stock = stock - $1 WHERE id = $2',
+                [item.cantidad, item.producto_id]
+            );
+        }
+
+        const queryAuditoria = `
+            INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) 
+            VALUES ($1, $2, $3, NOW());
+        `;
+        const desgloseDetalle = `Venta registrada Folio: #V-${nuevaVentaId}. Total: $${parseFloat(total).toFixed(2)}.`;
+        await pool.query(queryAuditoria, [idOperador, 'REGISTRO_VENTA', desgloseDetalle]);
+
+        await pool.query('COMMIT');
+        res.status(201).json({ message: 'Venta procesada con éxito', venta_id: nuevaVentaId });
+    } catch (error) {
+        await pool.query('ROLLBACK');
+        console.error("Error crítico en venta:", error);
+        res.status(500).json({ error: 'No se pudo registrar la venta.' });
+    }
+});
+
+// ==========================================
+// 5. TABLA: devoluciones
+// ==========================================
+router.get('/devoluciones', verificarToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT d.id, d.venta_id, d.producto_detalle, d.cantidad, d.motivo_devolucion, 
+                   d.monto_reembolsado, d.tipo_reembolso, d.fecha_devolucion, u.username as operador_name
+            FROM devoluciones d
+            INNER JOIN usuarios u ON d.usuario_id = u.id
+            ORDER BY d.fecha_devolucion DESC;
+        `;
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'No se pudo cargar el historial.' });
+    }
+});
+
+router.post('/devoluciones', verificarToken, async (req, res) => {
+    const { venta_id, producto_detalle, cantidad, motivo_devolucion, monto_reembolsado, tipo_reembolso } = req.body;
+    const idOperador = req.usuario_id || 1; 
+    try {
+        await pool.query('BEGIN');
+        const queryInsertDev = `
+            INSERT INTO devoluciones (venta_id, producto_detalle, cantidad, motivo_devolucion, monto_reembolsado, tipo_reembolso, usuario_id, fecha_devolucion)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING id;
+        `;
+        const resDev = await pool.query(queryInsertDev, [parseInt(venta_id), producto_detalle, parseInt(cantidad), motivo_devolucion, parseFloat(monto_reembolsado), tipo_reembolso, idOperador]);
+        const devId = resDev.rows[0].id;
+
+        const resProd = await pool.query(`SELECT id FROM productos WHERE UPPER(nombre) = UPPER($1) LIMIT 1;`, [producto_detalle.trim()]);
+        if (resProd.rows.length > 0) {
+            await pool.query(`UPDATE productos SET stock = stock + $1 WHERE id = $2;`, [parseInt(cantidad), resProd.rows[0].id]);
+        }
+
+        await pool.query(`INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) VALUES ($1, $2, $3, NOW());`, [idOperador, 'REGISTRO_DEVOLUCION', `DEV-${devId} Reintegrado: ${cantidad} pz.`]);
+        await pool.query('COMMIT');
+        res.status(201).json({ ok: true, message: "Devolución registrada con éxito.", devolucion_id: devId });
+    } catch (error) {
+        await pool.query('ROLLBACK');
+        res.status(500).json({ error: "Error procesando devolución." });
+    }
+});
+
+// ==========================================
+// 6. CONTROL FINANCIERO Y MOVIMIENTOS CAJA
+// ==========================================
 router.get('/movimientos-caja', verificarToken, async (req, res) => {
     try {
-        // Hacemos la consulta ordenando por el ID más reciente primero
-        const queryCaja = `
-            SELECT id, usuario_id, monto_inicial, monto_final, fecha_apertura, fecha_cierre, estado 
-            FROM movimientos_caja 
-            ORDER BY id DESC;
-        `;
-        
-        const resultado = await pool.query(queryCaja);
-        
-        // Respondemos al frontend mandando las filas de la base de datos en JSON
-        res.status(200).json(resultado.rows);
-
+        const result = await pool.query(`SELECT id, usuario_id, monto_inicial, monto_final, fecha_apertura, fecha_cierre, estado FROM movimientos_caja ORDER BY id DESC;`);
+        res.status(200).json(result.rows);
     } catch (error) {
-        console.error("Error crítico leyendo movimientos_caja de RDS:", error);
-        res.status(500).json({ error: "No se pudieron obtener los registros de caja." });
+        res.status(500).json({ error: "Error leyendo movimientos_caja." });
     }
 });
-// =================================================================
-// 🔒 NUEVO ENDPOINT: VALIDAR AUTORIZACIÓN DE DESCUENTO (POST)
-// =================================================================
+
+router.get('/movimientos-caja/detalles-ticket/:id', verificarToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const resCaja = await pool.query(`SELECT fecha_apertura, fecha_cierre FROM movimientos_caja WHERE id = $1;`, [id]);
+        if (resCaja.rows.length === 0) return res.status(404).json({ error: "Corte no encontrado." });
+
+        const { fecha_apertura, fecha_cierre } = resCaja.rows[0];
+        const limiteCierre = fecha_cierre ? fecha_cierre : new Date();
+
+        const queryArticulos = `
+            SELECT p.nombre AS prenda, dv.cantidad, dv.precio_unitario, (dv.cantidad * dv.precio_unitario) AS subtotal
+            FROM detalle_ventas dv
+            JOIN ventas v ON dv.venta_id = v.id
+            JOIN productos p ON dv.producto_id = p.id
+            WHERE v.fecha_venta >= $1 AND v.fecha_venta <= $2
+            ORDER BY v.id ASC;
+        `;
+        const resArticulos = await pool.query(queryArticulos, [fecha_apertura, limiteCierre]);
+        res.status(200).json(resArticulos.rows);
+    } catch (error) {
+        res.status(500).json({ error: "Error al procesar ticket." });
+    }
+});
+
+router.post('/movimientos-caja/abrir-caja', verificarToken, async (req, res) => {
+    const { usuario_id, monto_inicial } = req.body;
+    const idOperador = usuario_id ? parseInt(usuario_id) : 1;
+    const fondo = monto_inicial ? parseFloat(monto_inicial) : 0.00;
+    try {
+        await pool.query('BEGIN');
+        const resVerificar = await pool.query(`SELECT id FROM movimientos_caja WHERE estado = 'abierta';`);
+        if (resVerificar.rows.length > 0) {
+            await pool.query('ROLLBACK');
+            return res.status(400).json({ error: "Ya existe una caja abierta en el sistema." });
+        }
+        const resAbrir = await pool.query(`INSERT INTO movimientos_caja (usuario_id, monto_inicial, fecha_apertura, estado) VALUES ($1, $2, NOW(), 'abierta') RETURNING id;`, [idOperador, fondo]);
+        await pool.query(`INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) VALUES ($1, $2, $3, NOW());`, [idOperador, 'APERTURA_CAJA', `Corte #C-${resAbrir.rows[0].id}. Fondo: $${fondo.toFixed(2)}`]);
+        await pool.query('COMMIT');
+        res.status(201).json({ ok: true, caja_id: resAbrir.rows[0].id });
+    } catch (error) {
+        await pool.query('ROLLBACK');
+        res.status(500).json({ error: "No se pudo abrir la caja." });
+    }
+});
+
+router.post('/movimientos-caja/cerrar-caja', verificarToken, async (req, res) => {
+    const { usuario_id } = req.body;
+    const idOperador = usuario_id ? parseInt(usuario_id) : 1;
+    try {
+        await pool.query('BEGIN');
+        const resCaja = await pool.query(`SELECT id, fecha_apertura, monto_inicial FROM movimientos_caja WHERE usuario_id = $1 AND estado = 'abierta' ORDER BY id DESC LIMIT 1;`, [idOperador]);
+        if (resCaja.rows.length === 0) {
+            await pool.query('ROLLBACK');
+            return res.status(400).json({ error: "No se encontró ninguna caja abierta." });
+        }
+        const { id: cajaId, fecha_apertura, monto_inicial } = resCaja.rows[0];
+        const resVentas = await pool.query(`SELECT COALESCE(SUM(total), 0) AS total_ventas FROM ventas WHERE usuario_id = $1 AND fecha_venta >= $2;`, [idOperador, fecha_apertura]);
+        
+        const totalVentasTurno = parseFloat(resVentas.rows[0].total_ventas);
+        const montoFinalCalculado = parseFloat(monto_inicial) + totalVentasTurno;
+
+        await pool.query(`UPDATE movimientos_caja SET monto_final = $1, fecha_cierre = NOW(), estado = 'cerrada' WHERE id = $2;`, [montoFinalCalculado, cajaId]);
+        await pool.query(`INSERT INTO auditoria (usuario_id, accion_realizada, detalle_accion, fecha) VALUES ($1, $2, $3, NOW());`, [idOperador, 'CIERRE_CAJA', `Corte #C-${cajaId}. Total: $${montoFinalCalculado.toFixed(2)}`]);
+        await pool.query('COMMIT');
+        res.status(200).json({ ok: true, caja_id: cajaId, ventas_del_dia: totalVentasTurno, monto_final: montoFinalCalculado });
+    } catch (error) {
+        await pool.query('ROLLBACK');
+        res.status(500).json({ error: "No se pudo procesar el cierre." });
+    }
+});
+
+// ==========================================
+// 7. ASISTENCIA PROBADORES Y SEGURIDAD
+// ==========================================
+router.post('/asistencia', async (req, res) => {
+    const { probador_id, nota } = req.body; 
+    try {
+        await pool.query(`INSERT INTO asistencia_probadores (probador_id, estado, atendido_por, nota) VALUES ($1, 'pendiente', NULL, $2);`, [probador_id, nota]);
+        res.status(201).json({ message: 'Asistencia solicitada con éxito.' });
+    } catch (error) { 
+        res.status(500).json({ error: 'Error al solicitar asistencia.' }); 
+    }
+});
+
+router.get('/asistencia', async (req, res) => {
+    try {
+        const result = await pool.query(`SELECT id, probador_id, estado, atendido_por, fecha_solicitud, nota FROM asistencia_probadores WHERE estado IN ('pendiente', 'recibido', 'atendido') ORDER BY fecha_solicitud DESC;`);
+        res.json(result.rows);
+    } catch (error) { 
+        res.status(500).json({ error: 'No se pudo cargar el flujo.' }); 
+    }
+});
+
+router.put('/asistencia/atender/:id', async (req, res) => {
+    const { id } = req.params;
+    const { usuario_id } = req.body;
+    try {
+        await pool.query(`UPDATE asistencia_probadores SET estado = 'atendido', atendido_por = $1 WHERE id = $2;`, [parseInt(usuario_id || 4), parseInt(id)]);
+        res.status(200).json({ ok: true });
+    } catch (error) { res.status(500).json({ error: "Error al actualizar probador." }); }
+});
+
 router.post('/usuarios/validar-autorizacion', verificarToken, async (req, res) => {
     const { supervisor_id } = req.body;
-
     try {
-        // Consultamos el rol y nombre del empleado directamente
-        const query = `SELECT username, rol FROM usuarios WHERE id = $1;`;
-        const result = await pool.query(query, [parseInt(supervisor_id)]);
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ valid: false, error: "El ID de empleado no existe." });
-        }
+        const result = await pool.query(`SELECT username, rol FROM usuarios WHERE id = $1;`, [parseInt(supervisor_id)]);
+        if (result.rows.length === 0) return res.status(404).json({ valid: false, error: "El ID de empleado no existe." });
 
         const supervisor = result.rows[0];
-
-        // 🛡️ Filtro de privilegios: Solo Admin o Encargado pueden liberar descuentos
         if (supervisor.rol === 'admin' || supervisor.rol === 'encargado') {
-            return res.status(200).json({ 
-                valid: true, 
-                supervisor: supervisor.username, 
-                rol: supervisor.rol 
-            });
+            return res.status(200).json({ valid: true, supervisor: supervisor.username, rol: supervisor.rol });
         } else {
-            return res.status(403).json({ 
-                valid: false, 
-                error: "Permiso denegado. Este empleado no tiene rango de Supervisor." 
-            });
+            return res.status(403).json({ valid: false, error: "Permiso denegado." });
         }
-
-    } catch (error) {
-        console.error("Error en el módulo de seguridad de descuentos:", error);
-        res.status(500).json({ error: "Error interno al validar la firma de autorización." });
-    }
+    } catch (error) { res.status(500).json({ error: "Error interno de validación." }); }
 });
+
 export default router;
